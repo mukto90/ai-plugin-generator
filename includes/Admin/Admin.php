@@ -21,7 +21,7 @@ class Admin {
 			'aipg-plugins',
 			array( $this, 'render_list_page' ),
 			'dashicons-superhero-alt',
-			65
+			3
 		);
 
 		add_submenu_page(

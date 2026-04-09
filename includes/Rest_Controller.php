@@ -142,6 +142,24 @@ class Rest_Controller {
 			)
 		);
 
+		// Slug check.
+		register_rest_route(
+			$this->namespace,
+			'/check-slug',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'check_slug' ),
+				'permission_callback' => array( $this, 'check_admin' ),
+				'args'                => array(
+					'slug' => array(
+						'required'          => true,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_title',
+					),
+				),
+			)
+		);
+
 		// Providers list.
 		register_rest_route(
 			$this->namespace,
@@ -575,6 +593,48 @@ class Rest_Controller {
 
 		// Return masked settings.
 		return $this->get_settings();
+	}
+
+	/**
+	 * GET /check-slug — Check slug against local DB and wordpress.org.
+	 */
+	public function check_slug( WP_REST_Request $request ) {
+		$slug    = $request->get_param( 'slug' );
+		$conflicts = array();
+
+		// Check local DB.
+		$manager = new Plugin_Manager();
+		$existing = $manager->get_by_slug( $slug );
+		if ( $existing ) {
+			$conflicts[] = 'local';
+		}
+
+		// Check if already installed as a WP plugin.
+		if ( is_dir( WP_PLUGIN_DIR . '/' . $slug ) ) {
+			$conflicts[] = 'installed';
+		}
+
+		// Check wordpress.org plugin directory.
+		$wp_org = wp_remote_get(
+			'https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&slug=' . $slug,
+			array( 'timeout' => 10 )
+		);
+
+		if ( ! is_wp_error( $wp_org ) ) {
+			$body = json_decode( wp_remote_retrieve_body( $wp_org ), true );
+			if ( ! empty( $body['name'] ) ) {
+				$conflicts[] = 'wordpress.org';
+			}
+		}
+
+		return new WP_REST_Response(
+			array(
+				'slug'      => $slug,
+				'available' => empty( $conflicts ),
+				'conflicts' => $conflicts,
+			),
+			200
+		);
 	}
 
 	/**

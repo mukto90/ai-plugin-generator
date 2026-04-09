@@ -6,6 +6,8 @@
 	var editMode = false;
 	var editId = 0;
 	var codeEditable = false;
+	var slugAvailable = true;
+	var slugCheckXhr = null;
 
 	var samples = [
 		{
@@ -144,6 +146,11 @@
 					.replace(/-+/g, '-')
 					.replace(/^-|-$/g, '');
 				$('#aipg-slug').val(slug);
+				checkSlug(slug);
+			});
+
+			$('#aipg-slug').on('change', function () {
+				checkSlug($(this).val());
 			});
 		}
 
@@ -173,6 +180,45 @@
 			switchTab(index);
 		});
 	});
+
+	function checkSlug(slug) {
+		if (!slug || slug.length < 2) {
+			$('#aipg-slug-status').remove();
+			slugAvailable = true;
+			return;
+		}
+
+		// Abort previous request.
+		if (slugCheckXhr) {
+			slugCheckXhr.abort();
+		}
+
+		slugCheckXhr = $.ajax({
+			url: aipgData.restUrl + 'check-slug',
+			method: 'GET',
+			headers: { 'X-WP-Nonce': aipgData.nonce },
+			data: { slug: slug },
+			success: function (response) {
+				$('#aipg-slug-status').remove();
+
+				if (response.available) {
+					slugAvailable = true;
+					$('#aipg-slug').after(
+						'<p id="aipg-slug-status" class="description aipg-slug-ok">' +
+						'Slug is available.</p>'
+					);
+				} else {
+					slugAvailable = false;
+					var sources = response.conflicts.join(', ');
+					$('#aipg-slug').after(
+						'<p id="aipg-slug-status" class="description aipg-slug-conflict">' +
+						'Slug conflict: already exists in ' + escHtml(sources) +
+						'. Please choose a different slug.</p>'
+					);
+				}
+			}
+		});
+	}
 
 	function initSamples() {
 		var $select = $('#aipg-samples');
@@ -236,6 +282,11 @@
 
 		if (!data.name || !data.slug || !data.requirements) {
 			showNotice('Please fill in all required fields.', 'error');
+			return;
+		}
+
+		if (!editMode && !slugAvailable) {
+			showNotice('Slug has a conflict. Please choose a different slug before generating.', 'error');
 			return;
 		}
 

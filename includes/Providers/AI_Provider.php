@@ -143,7 +143,10 @@ abstract class AI_Provider {
 			'For each file, output a heading line like: === filename.php === followed by a ```php code block. ' .
 			'If the plugin is simple enough for a single file, output: === plugin-slug.php === followed by the code block. ' .
 			'Include the plugin header comment with all provided metadata. ' .
-			'The code must be secure, well-structured, and ready to use.';
+			'The code must be secure, well-structured, and ready to use. ' .
+			'CRITICAL: Before responding, carefully review your generated code for syntax errors, undefined functions, ' .
+			'missing closing brackets, incorrect hook usage, and any issues that could cause a fatal error or site crash. ' .
+			'The plugin will be installed directly on a live WordPress site — it MUST work without errors.';
 	}
 
 	/**

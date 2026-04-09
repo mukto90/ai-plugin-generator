@@ -17,14 +17,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 	</div>
 
 	<div class="aipg-card">
-		<div class="aipg-card-body">
-			<div class="aipg-list-toolbar">
-				<div class="aipg-search-box">
-					<input type="search" id="aipg-search" placeholder="<?php esc_attr_e( 'Search plugins...', 'ai-plugin-generator' ); ?>">
-					<button type="button" class="button aipg-btn" id="aipg-search-btn"><?php esc_html_e( 'Search', 'ai-plugin-generator' ); ?></button>
-				</div>
+		<div class="aipg-card-header">
+			<h2><?php esc_html_e( 'All Plugins', 'ai-plugin-generator' ); ?></h2>
+			<div class="aipg-search-box">
+				<input type="search" id="aipg-search" placeholder="<?php esc_attr_e( 'Search plugins...', 'ai-plugin-generator' ); ?>">
+				<button type="button" class="button aipg-btn aipg-btn-sm" id="aipg-search-btn"><?php esc_html_e( 'Search', 'ai-plugin-generator' ); ?></button>
 			</div>
-
+		</div>
+		<div class="aipg-card-body aipg-list-body">
 			<table class="wp-list-table widefat fixed striped" id="aipg-plugins-table">
 				<thead>
 					<tr>
