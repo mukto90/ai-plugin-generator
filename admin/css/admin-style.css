@@ -559,18 +559,6 @@
 	padding: 16px 24px;
 }
 
-/* Search */
-.aipg-search-box {
-	display: flex;
-	gap: 8px;
-}
-
-.aipg-search-box input {
-	padding: 6px 12px;
-	border: 1px solid var(--aipg-border);
-	border-radius: 6px;
-	min-width: 250px;
-}
 
 /* Pagination */
 .aipg-pagination {

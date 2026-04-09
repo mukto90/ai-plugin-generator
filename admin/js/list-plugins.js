@@ -3,23 +3,9 @@
 
 	var currentPage = 1;
 	var perPage = 20;
-	var searchTerm = '';
 
 	$(document).ready(function () {
 		loadPlugins();
-
-		$('#aipg-search-btn').on('click', function () {
-			searchTerm = $('#aipg-search').val();
-			currentPage = 1;
-			loadPlugins();
-		});
-
-		$('#aipg-search').on('keypress', function (e) {
-			if (e.which === 13) {
-				e.preventDefault();
-				$('#aipg-search-btn').click();
-			}
-		});
 	});
 
 	function loadPlugins() {
@@ -35,8 +21,7 @@
 			headers: { 'X-WP-Nonce': aipgData.nonce },
 			data: {
 				per_page: perPage,
-				offset: (currentPage - 1) * perPage,
-				search: searchTerm
+				offset: (currentPage - 1) * perPage
 			},
 			success: function (response) {
 				renderPlugins(response.items);

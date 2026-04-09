@@ -190,11 +190,10 @@ class Rest_Controller {
 			'order'   => $request->get_param( 'order' ) ?? 'DESC',
 			'limit'   => (int) ( $request->get_param( 'per_page' ) ?? 20 ),
 			'offset'  => (int) ( $request->get_param( 'offset' ) ?? 0 ),
-			'search'  => $request->get_param( 'search' ) ?? '',
 		);
 
 		$plugins = $manager->get_all( $args );
-		$total   = $manager->get_total( $args['search'] );
+		$total   = $manager->get_total();
 
 		$installer = new Plugin_Installer();
 		$items     = array();

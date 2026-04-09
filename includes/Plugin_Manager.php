@@ -25,7 +25,6 @@ class Plugin_Manager {
 			'order'   => 'DESC',
 			'limit'   => 20,
 			'offset'  => 0,
-			'search'  => '',
 		);
 
 		$args = wp_parse_args( $args, $defaults );
@@ -34,16 +33,10 @@ class Plugin_Manager {
 		$orderby         = in_array( $args['orderby'], $allowed_orderby, true ) ? $args['orderby'] : 'created_at';
 		$order           = strtoupper( $args['order'] ) === 'ASC' ? 'ASC' : 'DESC';
 
-		$where = '';
-		if ( ! empty( $args['search'] ) ) {
-			$search = '%' . $wpdb->esc_like( $args['search'] ) . '%';
-			$where  = $wpdb->prepare( ' WHERE name LIKE %s OR slug LIKE %s', $search, $search );
-		}
-
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$results = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$this->table_name}{$where} ORDER BY {$orderby} {$order} LIMIT %d OFFSET %d",
+				"SELECT * FROM {$this->table_name} ORDER BY {$orderby} {$order} LIMIT %d OFFSET %d",
 				$args['limit'],
 				$args['offset']
 			)
@@ -52,17 +45,11 @@ class Plugin_Manager {
 		return $results ? $results : array();
 	}
 
-	public function get_total( $search = '' ) {
+	public function get_total() {
 		global $wpdb;
 
-		$where = '';
-		if ( ! empty( $search ) ) {
-			$like  = '%' . $wpdb->esc_like( $search ) . '%';
-			$where = $wpdb->prepare( ' WHERE name LIKE %s OR slug LIKE %s', $like, $like );
-		}
-
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table_name}{$where}" );
+		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table_name}" );
 	}
 
 	public function get( $id ) {
