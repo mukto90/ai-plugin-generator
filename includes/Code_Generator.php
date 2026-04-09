@@ -2,10 +2,9 @@
 
 namespace A_Plugin_Generator;
 
-use A_Plugin_Generator\Providers\AI_Provider;
-use A_Plugin_Generator\Providers\OpenAI_Provider;
-use A_Plugin_Generator\Providers\DeepSeek_Provider;
-use A_Plugin_Generator\Providers\Gemini_Provider;
+use A_Plugin_Generator\Providers\OpenAI;
+use A_Plugin_Generator\Providers\DeepSeek;
+use A_Plugin_Generator\Providers\Gemini;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -15,9 +14,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Code_Generator {
 
 	private static $providers = array(
-		'openai'   => OpenAI_Provider::class,
-		'deepseek' => DeepSeek_Provider::class,
-		'gemini'   => Gemini_Provider::class,
+		'openai'   => OpenAI::class,
+		'deepseek' => DeepSeek::class,
+		'gemini'   => Gemini::class,
 	);
 
 	public function generate( $plugin_data ) {

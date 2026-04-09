@@ -41,6 +41,85 @@
 				'- Smooth accordion animation (expand/collapse)\n' +
 				'- Schema.org FAQPage structured data output\n' +
 				'- Clean, accessible design with keyboard navigation'
+		},
+		{
+			name: 'Custom Login Page',
+			slug: 'custom-login-page',
+			description: 'Customize the WordPress login page appearance.',
+			requirements: 'Create a custom login page plugin. Features:\n' +
+				'- Settings page with options for: logo image URL, background color, form background color, button color\n' +
+				'- Custom CSS that overrides the default WP login styles\n' +
+				'- Custom footer text on login page\n' +
+				'- Logo links to the site homepage instead of wordpress.org\n' +
+				'- Responsive and clean design'
+		},
+		{
+			name: 'Reading Time Estimator',
+			slug: 'reading-time-estimator',
+			description: 'Show estimated reading time on posts.',
+			requirements: 'Create a reading time estimator plugin. Features:\n' +
+				'- Calculate estimated reading time based on word count (average 200 words/min)\n' +
+				'- Automatically display above or below post content\n' +
+				'- Settings: words per minute, position (before/after content), post types, display text format\n' +
+				'- Shortcode [reading_time] for manual placement\n' +
+				'- Simple and lightweight'
+		},
+		{
+			name: 'Social Share Buttons',
+			slug: 'social-share-buttons',
+			description: 'Add social sharing buttons to posts and pages.',
+			requirements: 'Create a social share buttons plugin. Features:\n' +
+				'- Automatically add share buttons after post content\n' +
+				'- Support: Facebook, Twitter/X, LinkedIn, WhatsApp, Email\n' +
+				'- Settings page to choose which platforms to show\n' +
+				'- Settings to choose post types where buttons appear\n' +
+				'- Clean, modern button design with SVG icons and hover effects'
+		},
+		{
+			name: 'Back to Top Button',
+			slug: 'back-to-top-button',
+			description: 'A smooth scroll-to-top button that appears on scroll.',
+			requirements: 'Create a back to top button plugin. Features:\n' +
+				'- Floating button appears after scrolling down 300px\n' +
+				'- Smooth scroll animation to top\n' +
+				'- Settings: button color, position (left/right), icon, scroll offset threshold\n' +
+				'- Fade in/out animation\n' +
+				'- Mobile-friendly sizing'
+		},
+		{
+			name: 'Post Views Counter',
+			slug: 'post-views-counter',
+			description: 'Track and display how many times each post has been viewed.',
+			requirements: 'Create a post views counter plugin. Features:\n' +
+				'- Track views for posts and pages using post meta\n' +
+				'- Exclude logged-in admins from view count\n' +
+				'- Display view count automatically before or after post content\n' +
+				'- Shortcode [post_views] to display count anywhere\n' +
+				'- Admin column in post list showing view counts\n' +
+				'- Dashboard widget showing top 10 most viewed posts'
+		},
+		{
+			name: 'Simple Notice Bar',
+			slug: 'simple-notice-bar',
+			description: 'Display a customizable announcement bar at the top of your site.',
+			requirements: 'Create a notice bar / announcement bar plugin. Features:\n' +
+				'- Fixed or sticky bar at the top of the site\n' +
+				'- Settings: message text, background color, text color, font size, link URL, link text\n' +
+				'- Dismissible with a close button (remembers via cookie)\n' +
+				'- Option to show only on homepage or all pages\n' +
+				'- Smooth slide-down animation on page load'
+		},
+		{
+			name: 'Duplicate Post',
+			slug: 'duplicate-post',
+			description: 'One-click duplicate any post or page.',
+			requirements: 'Create a duplicate post plugin. Features:\n' +
+				'- Add "Duplicate" link to post/page row actions in admin\n' +
+				'- Duplicates all content, title (prefixed with "Copy of"), featured image, categories, tags, and custom fields\n' +
+				'- New post is created as draft\n' +
+				'- Redirects to the edit screen of the new post after duplicating\n' +
+				'- Works with all public post types\n' +
+				'- Admin bar "Duplicate" link when viewing a single post'
 		}
 	];
 

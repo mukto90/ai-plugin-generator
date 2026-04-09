@@ -1,6 +1,6 @@
 <?php
 /**
- * DeepSeek provider implementation.
+ * Google Gemini provider implementation.
  *
  * @package A_Plugin_Generator
  */
@@ -13,34 +13,34 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class DeepSeek_Provider extends AI_Provider {
+class Gemini extends AI_Provider {
 
 	/**
-	 * API endpoint URL.
+	 * API base URL.
 	 *
 	 * @var string
 	 */
-	private $api_url = 'https://api.deepseek.com/chat/completions';
+	private $api_url = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
 	/**
 	 * {@inheritDoc}
 	 */
 	public function get_name() {
-		return 'DeepSeek';
+		return 'Google Gemini';
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	public function get_slug() {
-		return 'deepseek';
+		return 'gemini';
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	protected function get_default_model() {
-		return 'deepseek-chat';
+		return 'gemini-2.0-flash';
 	}
 
 	/**
@@ -52,29 +52,29 @@ class DeepSeek_Provider extends AI_Provider {
 			return $check;
 		}
 
+		$prompt   = $this->get_system_prompt() . "\n\n" . $this->build_prompt( $plugin_data );
+		$endpoint = $this->api_url . $this->model . ':generateContent?key=' . $this->api_key;
+
 		$response = wp_remote_post(
-			$this->api_url,
+			$endpoint,
 			array(
 				'timeout' => $this->generate_timeout,
 				'headers' => array(
-					'Authorization' => 'Bearer ' . $this->api_key,
-					'Content-Type'  => 'application/json',
+					'Content-Type' => 'application/json',
 				),
 				'body'    => wp_json_encode(
 					array(
-						'model'       => $this->model,
-						'messages'    => array(
+						'contents'         => array(
 							array(
-								'role'    => 'system',
-								'content' => $this->get_system_prompt(),
-							),
-							array(
-								'role'    => 'user',
-								'content' => $this->build_prompt( $plugin_data ),
+								'parts' => array(
+									array( 'text' => $prompt ),
+								),
 							),
 						),
-						'temperature' => 0.3,
-						'max_tokens'  => 8192,
+						'generationConfig' => array(
+							'temperature'     => 0.3,
+							'maxOutputTokens' => 16000,
+						),
 					)
 				),
 			)
@@ -85,35 +85,38 @@ class DeepSeek_Provider extends AI_Provider {
 			return $body;
 		}
 
-		if ( empty( $body['choices'][0]['message']['content'] ) ) {
+		if ( empty( $body['candidates'][0]['content']['parts'][0]['text'] ) ) {
 			return new WP_Error( 'aipg_empty_response', __( 'AI returned an empty response.', 'ai-plugin-generator' ) );
 		}
 
-		return $this->extract_code( $body['choices'][0]['message']['content'] );
+		return $this->extract_code( $body['candidates'][0]['content']['parts'][0]['text'] );
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	public function validate_api_key( $api_key ) {
+		$endpoint = $this->api_url . 'gemini-2.0-flash:generateContent?key=' . $api_key;
+
 		$response = wp_remote_post(
-			$this->api_url,
+			$endpoint,
 			array(
 				'timeout' => $this->validate_timeout,
 				'headers' => array(
-					'Authorization' => 'Bearer ' . $api_key,
-					'Content-Type'  => 'application/json',
+					'Content-Type' => 'application/json',
 				),
 				'body'    => wp_json_encode(
 					array(
-						'model'    => 'deepseek-chat',
-						'messages' => array(
+						'contents'         => array(
 							array(
-								'role'    => 'user',
-								'content' => 'Hi',
+								'parts' => array(
+									array( 'text' => 'Hi' ),
+								),
 							),
 						),
-						'max_tokens' => 5,
+						'generationConfig' => array(
+							'maxOutputTokens' => 5,
+						),
 					)
 				),
 			)
@@ -127,6 +130,6 @@ class DeepSeek_Provider extends AI_Provider {
 			return true;
 		}
 
-		return new WP_Error( 'aipg_invalid_key', __( 'Invalid DeepSeek API key.', 'ai-plugin-generator' ) );
+		return new WP_Error( 'aipg_invalid_key', __( 'Invalid Gemini API key.', 'ai-plugin-generator' ) );
 	}
 }
