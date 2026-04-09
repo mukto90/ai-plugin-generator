@@ -394,9 +394,25 @@ class Rest_Controller {
 	 * DELETE /plugins/{id}
 	 */
 	public function delete_plugin( WP_REST_Request $request ) {
-		$manager = new Plugin_Manager();
-		$result  = $manager->delete( (int) $request['id'] );
+		$manager   = new Plugin_Manager();
+		$installer = new Plugin_Installer();
+		$id        = (int) $request['id'];
 
+		$plugin = $manager->get( $id );
+		if ( is_wp_error( $plugin ) ) {
+			return $plugin;
+		}
+
+		// Deactivate and uninstall from WP if installed.
+		if ( $installer->is_installed( $plugin ) ) {
+			if ( $installer->is_active( $plugin ) ) {
+				$installer->deactivate_plugin( $plugin );
+			}
+			$installer->uninstall_plugin( $plugin );
+		}
+
+		// Delete DB record and zip file.
+		$result = $manager->delete( $id );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
