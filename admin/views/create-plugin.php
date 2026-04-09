@@ -28,7 +28,14 @@ $is_edit = $edit_id > 0;
 						<input type="hidden" id="aipg-edit-id" value="<?php echo esc_attr( $edit_id ); ?>">
 
 						<div class="aipg-field">
-							<label for="aipg-name"><?php esc_html_e( 'Plugin Name', 'ai-plugin-generator' ); ?> <span class="required">*</span></label>
+							<div class="aipg-field-label-row">
+								<label for="aipg-name"><?php esc_html_e( 'Plugin Name', 'ai-plugin-generator' ); ?> <span class="required">*</span></label>
+								<?php if ( ! $is_edit ) : ?>
+									<select id="aipg-samples" class="aipg-samples-dropdown">
+										<option value=""><?php esc_html_e( 'Samples', 'ai-plugin-generator' ); ?></option>
+									</select>
+								<?php endif; ?>
+							</div>
 							<input type="text" id="aipg-name" name="name" required placeholder="<?php esc_attr_e( 'My Awesome Plugin', 'ai-plugin-generator' ); ?>">
 						</div>
 

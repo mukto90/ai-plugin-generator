@@ -7,6 +7,43 @@
 	var editId = 0;
 	var codeEditable = false;
 
+	var samples = [
+		{
+			name: 'Coming Soon Page',
+			slug: 'coming-soon-page',
+			description: 'A simple coming soon / maintenance mode page.',
+			requirements: 'Create a coming soon / maintenance mode plugin. Features:\n' +
+				'- Admin toggle to enable/disable maintenance mode\n' +
+				'- A beautiful full-screen coming soon page with a countdown timer\n' +
+				'- Admin users can still access the site normally\n' +
+				'- Settings page to customize the launch date, headline, and message\n' +
+				'- Responsive design'
+		},
+		{
+			name: 'Simple Testimonials',
+			slug: 'simple-testimonials',
+			description: 'Display customer testimonials with a shortcode.',
+			requirements: 'Create a testimonials plugin. Features:\n' +
+				'- Custom post type "Testimonial" with fields: author name, role/company, quote, rating (1-5 stars), photo\n' +
+				'- Shortcode [testimonials] to display testimonials in a responsive grid\n' +
+				'- Shortcode attributes: count, columns, orderby\n' +
+				'- Star rating display\n' +
+				'- Clean, modern card-based design'
+		},
+		{
+			name: 'FAQ Accordion',
+			slug: 'faq-accordion',
+			description: 'Create and display FAQs in an accordion layout.',
+			requirements: 'Create an FAQ accordion plugin. Features:\n' +
+				'- Custom post type "FAQ" with question (title) and answer (content)\n' +
+				'- FAQ Groups/Categories taxonomy for organizing\n' +
+				'- Shortcode [faq] with optional group attribute\n' +
+				'- Smooth accordion animation (expand/collapse)\n' +
+				'- Schema.org FAQPage structured data output\n' +
+				'- Clean, accessible design with keyboard navigation'
+		}
+	];
+
 	$(document).ready(function () {
 		editId = parseInt($('#aipg-edit-id').val(), 10) || 0;
 		editMode = editId > 0;
@@ -15,8 +52,10 @@
 			loadPluginForEdit(editId);
 		}
 
-		// Auto-generate slug from name (only in create mode).
+		// Populate samples dropdown.
 		if (!editMode) {
+			initSamples();
+
 			$('#aipg-name').on('input', function () {
 				var name = $(this).val();
 				var slug = name
@@ -55,6 +94,34 @@
 			switchTab(index);
 		});
 	});
+
+	function initSamples() {
+		var $select = $('#aipg-samples');
+		if (!$select.length) {
+			return;
+		}
+
+		$.each(samples, function (i, sample) {
+			$select.append('<option value="' + i + '">' + escHtml(sample.name) + '</option>');
+		});
+
+		$select.on('change', function () {
+			var index = $(this).val();
+			if (index === '') {
+				return;
+			}
+
+			var sample = samples[index];
+			$('#aipg-name').val(sample.name).trigger('input');
+			$('#aipg-slug').val(sample.slug);
+			$('#aipg-requirements').val(sample.requirements);
+			$('#aipg-description').val(sample.description);
+			$('#aipg-version').val('1.0.0');
+
+			// Reset dropdown.
+			$(this).val('');
+		});
+	}
 
 	function loadPluginForEdit(id) {
 		$.ajax({

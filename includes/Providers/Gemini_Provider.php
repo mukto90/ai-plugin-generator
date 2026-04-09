@@ -1,4 +1,9 @@
 <?php
+/**
+ * Google Gemini provider implementation.
+ *
+ * @package A_Plugin_Generator
+ */
 
 namespace A_Plugin_Generator\Providers;
 
@@ -8,29 +13,43 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class Gemini_Provider implements AI_Provider {
+class Gemini_Provider extends AI_Provider {
 
-	private $api_key;
-	private $model;
+	/**
+	 * API base URL.
+	 *
+	 * @var string
+	 */
 	private $api_url = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
-	public function __construct() {
-		$settings      = get_option( 'aipg_settings', array() );
-		$this->api_key = isset( $settings['api_key'] ) ? $settings['api_key'] : '';
-		$this->model   = isset( $settings['model'] ) ? $settings['model'] : 'gemini-2.0-flash';
-	}
-
+	/**
+	 * {@inheritDoc}
+	 */
 	public function get_name() {
 		return 'Google Gemini';
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	public function get_slug() {
 		return 'gemini';
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
+	protected function get_default_model() {
+		return 'gemini-2.0-flash';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
 	public function generate( $plugin_data ) {
-		if ( empty( $this->api_key ) ) {
-			return new WP_Error( 'aipg_no_api_key', __( 'Gemini API key is not configured.', 'ai-plugin-generator' ) );
+		$check = $this->check_api_key();
+		if ( is_wp_error( $check ) ) {
+			return $check;
 		}
 
 		$prompt   = $this->get_system_prompt() . "\n\n" . $this->build_prompt( $plugin_data );
@@ -39,7 +58,7 @@ class Gemini_Provider implements AI_Provider {
 		$response = wp_remote_post(
 			$endpoint,
 			array(
-				'timeout' => 120,
+				'timeout' => $this->generate_timeout,
 				'headers' => array(
 					'Content-Type' => 'application/json',
 				),
@@ -53,7 +72,7 @@ class Gemini_Provider implements AI_Provider {
 							),
 						),
 						'generationConfig' => array(
-							'temperature'   => 0.3,
+							'temperature'     => 0.3,
 							'maxOutputTokens' => 16000,
 						),
 					)
@@ -61,16 +80,9 @@ class Gemini_Provider implements AI_Provider {
 			)
 		);
 
-		if ( is_wp_error( $response ) ) {
-			return $response;
-		}
-
-		$code = wp_remote_retrieve_response_code( $response );
-		$body = json_decode( wp_remote_retrieve_body( $response ), true );
-
-		if ( $code !== 200 ) {
-			$message = isset( $body['error']['message'] ) ? $body['error']['message'] : __( 'Unknown API error.', 'ai-plugin-generator' );
-			return new WP_Error( 'aipg_api_error', $message );
+		$body = $this->parse_response( $response );
+		if ( is_wp_error( $body ) ) {
+			return $body;
 		}
 
 		if ( empty( $body['candidates'][0]['content']['parts'][0]['text'] ) ) {
@@ -80,19 +92,22 @@ class Gemini_Provider implements AI_Provider {
 		return $this->extract_code( $body['candidates'][0]['content']['parts'][0]['text'] );
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
 	public function validate_api_key( $api_key ) {
 		$endpoint = $this->api_url . 'gemini-2.0-flash:generateContent?key=' . $api_key;
 
 		$response = wp_remote_post(
 			$endpoint,
 			array(
-				'timeout' => 15,
+				'timeout' => $this->validate_timeout,
 				'headers' => array(
 					'Content-Type' => 'application/json',
 				),
 				'body'    => wp_json_encode(
 					array(
-						'contents' => array(
+						'contents'         => array(
 							array(
 								'parts' => array(
 									array( 'text' => 'Hi' ),
@@ -111,52 +126,10 @@ class Gemini_Provider implements AI_Provider {
 			return $response;
 		}
 
-		$code = wp_remote_retrieve_response_code( $response );
-
-		if ( $code === 200 ) {
+		if ( 200 === wp_remote_retrieve_response_code( $response ) ) {
 			return true;
 		}
 
 		return new WP_Error( 'aipg_invalid_key', __( 'Invalid Gemini API key.', 'ai-plugin-generator' ) );
-	}
-
-	private function get_system_prompt() {
-		return 'You are a WordPress plugin developer. Generate complete, production-ready WordPress plugin code. ' .
-			'Follow WordPress Coding Standards (WPCS) strictly for PHP, CSS, and JavaScript. ' .
-			'Use proper sanitization, escaping, and nonces. ' .
-			'If the plugin needs frontend output, use clean, modern UI/UX with good typography, spacing, and colors. ' .
-			'Do NOT use Composer or any external dependencies — the generated plugin must be fully self-contained. ' .
-			'For each file, output a heading line like: === filename.php === followed by a ```php code block. ' .
-			'If the plugin is simple enough for a single file, output: === plugin-slug.php === followed by the code block. ' .
-			'Include the plugin header comment with all provided metadata. ' .
-			'The code must be secure, well-structured, and ready to use.';
-	}
-
-	private function build_prompt( $plugin_data ) {
-		$prompt = "Generate a WordPress plugin with the following details:\n\n";
-		$prompt .= "Plugin Name: {$plugin_data['name']}\n";
-		$prompt .= "Plugin Slug: {$plugin_data['slug']}\n";
-		$prompt .= "Version: {$plugin_data['version']}\n";
-
-		if ( ! empty( $plugin_data['author'] ) ) {
-			$prompt .= "Author: {$plugin_data['author']}\n";
-		}
-
-		if ( ! empty( $plugin_data['description'] ) ) {
-			$prompt .= "Description: {$plugin_data['description']}\n";
-		}
-
-		$prompt .= "\nRequirements:\n{$plugin_data['requirements']}\n";
-		$prompt .= "\nIMPORTANT: Use === filename.php === headings before each file's code block. ";
-		$prompt .= "Follow WordPress Coding Standards (WPCS) for all PHP, CSS, and JavaScript. ";
-		$prompt .= "Do NOT use Composer or any external package manager — the plugin must be fully self-contained. ";
-		$prompt .= "Include activation/deactivation hooks if needed. Use proper WordPress APIs. ";
-		$prompt .= "If the plugin has any user-facing output, use modern, clean UI/UX with good design.";
-
-		return $prompt;
-	}
-
-	private function extract_code( $content ) {
-		return trim( $content );
 	}
 }

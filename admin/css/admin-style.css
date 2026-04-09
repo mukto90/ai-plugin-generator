@@ -240,6 +240,41 @@
 	gap: 16px;
 }
 
+/* Label row with inline elements */
+.aipg-field-label-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 6px;
+}
+
+.aipg-field-label-row label {
+	margin-bottom: 0;
+}
+
+/* Samples dropdown */
+.aipg-samples-dropdown {
+	padding: 4px 10px;
+	border: 1px solid var(--aipg-border);
+	border-radius: 6px;
+	font-size: 12px;
+	color: var(--aipg-primary);
+	background: var(--aipg-card-bg);
+	cursor: pointer;
+	min-width: auto;
+	width: auto;
+}
+
+.aipg-samples-dropdown:hover {
+	border-color: var(--aipg-primary-light);
+}
+
+.aipg-samples-dropdown:focus {
+	border-color: var(--aipg-primary);
+	box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+	outline: none;
+}
+
 /* Actions */
 .aipg-actions {
 	margin-top: 24px;
