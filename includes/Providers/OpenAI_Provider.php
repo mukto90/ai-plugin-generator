@@ -108,8 +108,12 @@ class OpenAI_Provider implements AI_Provider {
 
 	private function get_system_prompt() {
 		return 'You are a WordPress plugin developer. Generate complete, production-ready WordPress plugin code. ' .
-			'Follow WordPress Coding Standards (WPCS). Use proper sanitization, escaping, and nonces. ' .
-			'Return ONLY the PHP code for the main plugin file wrapped in ```php code blocks. ' .
+			'Follow WordPress Coding Standards (WPCS) strictly for PHP, CSS, and JavaScript. ' .
+			'Use proper sanitization, escaping, and nonces. ' .
+			'If the plugin needs frontend output, use clean, modern UI/UX with good typography, spacing, and colors. ' .
+			'Do NOT use Composer or any external dependencies — the generated plugin must be fully self-contained. ' .
+			'For each file, output a heading line like: === filename.php === followed by a ```php code block. ' .
+			'If the plugin is simple enough for a single file, output: === plugin-slug.php === followed by the code block. ' .
 			'Include the plugin header comment with all provided metadata. ' .
 			'The code must be secure, well-structured, and ready to use.';
 	}
@@ -129,24 +133,17 @@ class OpenAI_Provider implements AI_Provider {
 		}
 
 		$prompt .= "\nRequirements:\n{$plugin_data['requirements']}\n";
-		$prompt .= "\nIMPORTANT: Return the complete plugin code in a single PHP file. ";
-		$prompt .= "Include activation/deactivation hooks if needed. Use proper WordPress APIs.";
+		$prompt .= "\nIMPORTANT: Use === filename.php === headings before each file's code block. ";
+		$prompt .= "Follow WordPress Coding Standards (WPCS) for all PHP, CSS, and JavaScript. ";
+		$prompt .= "Do NOT use Composer or any external package manager — the plugin must be fully self-contained. ";
+		$prompt .= "Include activation/deactivation hooks if needed. Use proper WordPress APIs. ";
+		$prompt .= "If the plugin has any user-facing output, use modern, clean UI/UX with good design.";
 
 		return $prompt;
 	}
 
 	private function extract_code( $content ) {
-		// Extract code from markdown code blocks if present.
-		if ( preg_match( '/```php\s*(.*?)\s*```/s', $content, $matches ) ) {
-			return $matches[1];
-		}
-
-		// If content starts with <?php, treat it as raw code.
-		if ( strpos( trim( $content ), '<?php' ) === 0 ) {
-			return trim( $content );
-		}
-
-		// Return as-is, let the user review.
-		return $content;
+		// Return raw content — multi-file parsing happens on the frontend.
+		return trim( $content );
 	}
 }

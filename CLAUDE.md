@@ -32,7 +32,8 @@ A WordPress plugin that lets admins generate other WordPress plugins using AI. U
 - **Coding Standards**: WordPress Coding Standards (WPCS)
 - **Prefix**: `aipg_` for functions/hooks, `AIPG_` for constants
 - **Namespace**: `A_Plugin_Generator\`
-- **File naming**: Class files use `class-{name}.php` (WP convention)
+- **Autoloading**: Composer PSR-4 (`A_Plugin_Generator\` → `includes/`)
+- **File naming**: PSR-4 convention — filenames match class names (e.g., `Plugin_Manager.php`)
 
 ### Architecture
 - **API-first**: All backend operations exposed via WP REST API (`/wp-json/aipg/v1/`)
@@ -63,36 +64,39 @@ A WordPress plugin that lets admins generate other WordPress plugins using AI. U
 - Support multiple providers via a common interface/adapter pattern
 - Providers: OpenAI, DeepSeek, Gemini (extensible)
 
-## Project Structure (planned)
+## Project Structure
 
 ```
 ai-plugin-generator/
   ai-plugin-generator.php          # Main plugin file, bootstrap
+  composer.json                    # Composer PSR-4 autoload config
   uninstall.php                    # Cleanup on uninstall
-  includes/
-    class-plugin.php               # Core plugin class (singleton, hooks, init)
-    class-activator.php            # Activation logic (DB tables, dirs)
-    class-deactivator.php          # Deactivation logic
-    class-rest-controller.php      # REST API registration and routing
-    class-plugin-manager.php       # CRUD for generated plugins (DB + filesystem)
-    class-plugin-installer.php     # Install/activate/deactivate generated plugins
-    class-code-generator.php       # Orchestrates AI code generation
-    class-zip-builder.php          # Packages generated code into zip
-  includes/providers/
-    interface-ai-provider.php      # Common AI provider interface
-    class-openai-provider.php      # OpenAI implementation
-    class-deepseek-provider.php    # DeepSeek implementation
-    class-gemini-provider.php      # Gemini implementation
-  admin/
-    class-admin.php                # Admin pages, menus, enqueues
+  vendor/                          # Composer autoloader (generated)
+  includes/                        # PSR-4 root: A_Plugin_Generator\
+    Plugin.php                     # Core plugin class (singleton, hooks, init)
+    Activator.php                  # Activation logic (DB tables, dirs)
+    Deactivator.php                # Deactivation logic
+    Rest_Controller.php            # REST API registration and routing
+    Plugin_Manager.php             # CRUD for generated plugins (DB + filesystem)
+    Plugin_Installer.php           # Install/activate/deactivate/replace generated plugins
+    Code_Generator.php             # Orchestrates AI code generation
+    Zip_Builder.php                # Packages generated code into zip
+    Admin/                         # A_Plugin_Generator\Admin\
+      Admin.php                    # Admin pages, menus, enqueues
+    Providers/                     # A_Plugin_Generator\Providers\
+      AI_Provider.php              # Common AI provider interface
+      OpenAI_Provider.php          # OpenAI implementation
+      DeepSeek_Provider.php        # DeepSeek implementation
+      Gemini_Provider.php          # Gemini implementation
+  admin/                           # Non-class assets (views, CSS, JS)
     views/
-      create-plugin.php            # Create plugin page template
+      create-plugin.php            # Create/Edit plugin page template
       list-plugins.php             # List plugins page template
       settings.php                 # Settings page template
     css/
       admin-style.css              # Admin styles
     js/
-      create-plugin.js             # jQuery for create page (form, preview, confirm)
+      create-plugin.js             # jQuery for create/edit page
       list-plugins.js              # jQuery for list page actions
       settings.js                  # jQuery for settings page
 ```

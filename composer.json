@@ -1,0 +1,14 @@
+{
+	"name": "a-plugin-generator/ai-plugin-generator",
+	"description": "Generate WordPress plugins using AI.",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"require": {
+		"php": ">=7.4"
+	},
+	"autoload": {
+		"psr-4": {
+			"A_Plugin_Generator\\": "includes/"
+		}
+	}
+}

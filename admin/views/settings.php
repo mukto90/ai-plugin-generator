@@ -29,12 +29,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 					<div class="aipg-field">
 						<label for="aipg-api-key"><?php esc_html_e( 'API Key', 'ai-plugin-generator' ); ?></label>
-						<div class="aipg-api-key-wrap">
-							<input type="password" id="aipg-api-key" name="api_key" placeholder="<?php esc_attr_e( 'Enter your API key...', 'ai-plugin-generator' ); ?>">
-							<button type="button" class="button" id="aipg-toggle-key">
-								<span class="dashicons dashicons-visibility"></span>
-							</button>
-						</div>
+						<input type="password" id="aipg-api-key" name="api_key" placeholder="<?php esc_attr_e( 'Enter your API key...', 'ai-plugin-generator' ); ?>">
 						<p class="description" id="aipg-key-status"></p>
 					</div>
 
@@ -45,7 +40,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 					</div>
 
 					<div class="aipg-actions">
-						<button type="submit" class="button button-primary">
+						<button type="submit" class="button button-primary aipg-btn">
 							<span class="dashicons dashicons-saved"></span>
 							<?php esc_html_e( 'Save Settings', 'ai-plugin-generator' ); ?>
 						</button>

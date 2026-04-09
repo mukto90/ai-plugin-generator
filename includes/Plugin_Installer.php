@@ -77,4 +77,43 @@ class Plugin_Installer {
 		$plugin_file = $plugin->slug . '/' . $plugin->slug . '.php';
 		return is_plugin_active( $plugin_file );
 	}
+
+	/**
+	 * Check if the installed plugin is outdated compared to the zip.
+	 * Compares the zip file's modification time with the installed plugin's mtime.
+	 */
+	public function needs_replace( $plugin ) {
+		if ( ! $this->is_installed( $plugin ) ) {
+			return false;
+		}
+
+		if ( empty( $plugin->file_path ) || ! file_exists( $plugin->file_path ) ) {
+			return false;
+		}
+
+		$installed_file = WP_PLUGIN_DIR . '/' . $plugin->slug . '/' . $plugin->slug . '.php';
+		$zip_mtime      = filemtime( $plugin->file_path );
+		$installed_mtime = filemtime( $installed_file );
+
+		return $zip_mtime > $installed_mtime;
+	}
+
+	/**
+	 * Remove installed plugin files from the plugins directory.
+	 */
+	public function uninstall_plugin( $plugin ) {
+		$plugin_dir = WP_PLUGIN_DIR . '/' . $plugin->slug;
+
+		if ( ! is_dir( $plugin_dir ) ) {
+			return true;
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		WP_Filesystem();
+
+		global $wp_filesystem;
+		$wp_filesystem->delete( $plugin_dir, true );
+
+		return true;
+	}
 }

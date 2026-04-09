@@ -113,6 +113,17 @@ class Rest_Controller {
 			)
 		);
 
+		// Replace (reinstall with updated zip).
+		register_rest_route(
+			$this->namespace,
+			'/plugins/(?P<id>\d+)/replace',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'replace_plugin' ),
+				'permission_callback' => array( $this, 'check_admin' ),
+			)
+		);
+
 		// Settings.
 		register_rest_route(
 			$this->namespace,
@@ -171,10 +182,11 @@ class Rest_Controller {
 		$items     = array();
 
 		foreach ( $plugins as $plugin ) {
-			$item              = (array) $plugin;
-			$item['installed'] = $installer->is_installed( $plugin );
-			$item['active']    = $installer->is_active( $plugin );
-			$items[]           = $item;
+			$item                  = (array) $plugin;
+			$item['installed']     = $installer->is_installed( $plugin );
+			$item['active']        = $installer->is_active( $plugin );
+			$item['needs_replace'] = $item['installed'] && $installer->needs_replace( $plugin );
+			$items[]               = $item;
 		}
 
 		return new WP_REST_Response(
@@ -217,28 +229,54 @@ class Rest_Controller {
 
 	/**
 	 * POST /plugins/{id}/confirm — Save to DB and create zip.
+	 * If id > 0, updates existing record. If id == 0, creates new.
 	 */
 	public function confirm_plugin( WP_REST_Request $request ) {
-		$code        = $request->get_param( 'code' );
+		$id          = (int) $request['id'];
+		$files       = $request->get_param( 'files' );
 		$plugin_data = $request->get_param( 'plugin_data' );
 
-		if ( empty( $code ) || empty( $plugin_data ) ) {
-			return new WP_Error( 'aipg_missing_data', __( 'Missing code or plugin data.', 'ai-plugin-generator' ), array( 'status' => 400 ) );
+		if ( empty( $files ) || empty( $plugin_data ) ) {
+			return new WP_Error( 'aipg_missing_data', __( 'Missing files or plugin data.', 'ai-plugin-generator' ), array( 'status' => 400 ) );
 		}
 
-		$manager    = new Plugin_Manager();
+		$manager     = new Plugin_Manager();
 		$zip_builder = new Zip_Builder();
-		$upload_dir = $manager->get_upload_dir();
+		$upload_dir  = $manager->get_upload_dir();
 
-		// Build zip.
-		$zip_path = $zip_builder->build( $plugin_data['slug'], $code, $upload_dir );
+		// Build zip from files array.
+		$slug     = sanitize_title( $plugin_data['slug'] );
+		$zip_path = $zip_builder->build( $slug, $files, $upload_dir );
 		if ( is_wp_error( $zip_path ) ) {
 			return $zip_path;
 		}
 
-		$plugin_data['file_path'] = $zip_path;
+		if ( $id > 0 ) {
+			// Update existing plugin record.
+			$existing = $manager->get( $id );
+			if ( is_wp_error( $existing ) ) {
+				return $existing;
+			}
 
-		// Save to DB.
+			$update_data = array(
+				'name'         => sanitize_text_field( $plugin_data['name'] ),
+				'version'      => sanitize_text_field( $plugin_data['version'] ?? $existing->version ),
+				'author'       => sanitize_text_field( $plugin_data['author'] ?? $existing->author ),
+				'description'  => sanitize_textarea_field( $plugin_data['description'] ?? $existing->description ),
+				'requirements' => sanitize_textarea_field( $plugin_data['requirements'] ?? $existing->requirements ),
+				'file_path'    => $zip_path,
+			);
+
+			$plugin = $manager->update( $id, $update_data );
+			if ( is_wp_error( $plugin ) ) {
+				return $plugin;
+			}
+
+			return new WP_REST_Response( (array) $plugin, 200 );
+		}
+
+		// Create new record.
+		$plugin_data['file_path'] = $zip_path;
 		$plugin = $manager->create( $plugin_data );
 		if ( is_wp_error( $plugin ) ) {
 			return $plugin;
@@ -441,6 +479,54 @@ class Rest_Controller {
 		$manager->update( (int) $request['id'], array( 'status' => 'installed' ) );
 
 		return new WP_REST_Response( array( 'deactivated' => true ), 200 );
+	}
+
+	/**
+	 * POST /plugins/{id}/replace — Replace installed plugin with updated zip.
+	 * Deactivates if active, removes old files, reinstalls from zip, reactivates if was active.
+	 */
+	public function replace_plugin( WP_REST_Request $request ) {
+		$manager   = new Plugin_Manager();
+		$installer = new Plugin_Installer();
+
+		$plugin = $manager->get( (int) $request['id'] );
+		if ( is_wp_error( $plugin ) ) {
+			return $plugin;
+		}
+
+		if ( ! $installer->is_installed( $plugin ) ) {
+			return new WP_Error( 'aipg_not_installed', __( 'Plugin is not installed.', 'ai-plugin-generator' ), array( 'status' => 400 ) );
+		}
+
+		$was_active = $installer->is_active( $plugin );
+
+		// Deactivate if active.
+		if ( $was_active ) {
+			$installer->deactivate_plugin( $plugin );
+		}
+
+		// Remove old plugin files.
+		$installer->uninstall_plugin( $plugin );
+
+		// Reinstall from zip.
+		$result = $installer->install( $plugin );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		// Reactivate if it was active before.
+		if ( $was_active ) {
+			$activate_result = $installer->activate_plugin( $plugin );
+			if ( is_wp_error( $activate_result ) ) {
+				$manager->update( (int) $request['id'], array( 'status' => 'installed' ) );
+				return new WP_REST_Response( array( 'replaced' => true, 'reactivated' => false ), 200 );
+			}
+			$manager->update( (int) $request['id'], array( 'status' => 'active' ) );
+		} else {
+			$manager->update( (int) $request['id'], array( 'status' => 'installed' ) );
+		}
+
+		return new WP_REST_Response( array( 'replaced' => true, 'reactivated' => $was_active ), 200 );
 	}
 
 	/**

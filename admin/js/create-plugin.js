@@ -1,29 +1,40 @@
 (function ($) {
 	'use strict';
 
-	var generatedCode = '';
+	var parsedFiles = [];
 	var pluginData = {};
+	var editMode = false;
+	var editId = 0;
+	var codeEditable = false;
 
 	$(document).ready(function () {
-		// Auto-generate slug from name.
-		$('#aipg-name').on('input', function () {
-			var name = $(this).val();
-			var slug = name
-				.toLowerCase()
-				.replace(/[^a-z0-9\s-]/g, '')
-				.replace(/\s+/g, '-')
-				.replace(/-+/g, '-')
-				.replace(/^-|-$/g, '');
-			$('#aipg-slug').val(slug);
-		});
+		editId = parseInt($('#aipg-edit-id').val(), 10) || 0;
+		editMode = editId > 0;
 
-		// Generate plugin.
+		if (editMode) {
+			loadPluginForEdit(editId);
+		}
+
+		// Auto-generate slug from name (only in create mode).
+		if (!editMode) {
+			$('#aipg-name').on('input', function () {
+				var name = $(this).val();
+				var slug = name
+					.toLowerCase()
+					.replace(/[^a-z0-9\s-]/g, '')
+					.replace(/\s+/g, '-')
+					.replace(/-+/g, '-')
+					.replace(/^-|-$/g, '');
+				$('#aipg-slug').val(slug);
+			});
+		}
+
+		// Generate / Regenerate.
 		$('#aipg-create-form').on('submit', function (e) {
 			e.preventDefault();
 			generatePlugin();
 		});
 
-		// Regenerate.
 		$('#aipg-regenerate-btn').on('click', function () {
 			generatePlugin();
 		});
@@ -32,11 +43,41 @@
 		$('#aipg-confirm-btn').on('click', function () {
 			confirmPlugin();
 		});
+
+		// Toggle code editing.
+		$('#aipg-edit-code-btn').on('click', function () {
+			toggleCodeEditing();
+		});
+
+		// Tab switching.
+		$(document).on('click', '.aipg-file-tab', function () {
+			var index = $(this).data('index');
+			switchTab(index);
+		});
 	});
+
+	function loadPluginForEdit(id) {
+		$.ajax({
+			url: aipgData.restUrl + 'plugins/' + id,
+			method: 'GET',
+			headers: { 'X-WP-Nonce': aipgData.nonce },
+			success: function (plugin) {
+				$('#aipg-name').val(plugin.name);
+				$('#aipg-slug').val(plugin.slug);
+				$('#aipg-version').val(plugin.version);
+				$('#aipg-author').val(plugin.author);
+				$('#aipg-description').val(plugin.description);
+				$('#aipg-requirements').val(plugin.requirements);
+			},
+			error: function (xhr) {
+				showNotice(getErrorMessage(xhr), 'error');
+			}
+		});
+	}
 
 	function generatePlugin() {
 		var $btn = $('#aipg-generate-btn');
-		var $icon = $btn.find('.aipg-spin-icon');
+		var $icon = $btn.find('.aipg-btn-icon');
 
 		var data = {
 			name: $('#aipg-name').val(),
@@ -55,32 +96,38 @@
 		$btn.prop('disabled', true);
 		$icon.addClass('spinning');
 		hideNotice();
-		showNotice(aipgData.i18n.generating, 'info');
+
+		// Show loading spinner in preview.
+		$('#aipg-preview-placeholder').hide();
+		$('#aipg-preview-content').hide();
+		$('#aipg-confirm-actions').hide();
+		$('#aipg-edit-code-btn').hide();
+		$('#aipg-preview-loading').show();
 
 		$.ajax({
 			url: aipgData.restUrl + 'plugins',
 			method: 'POST',
-			headers: {
-				'X-WP-Nonce': aipgData.nonce
-			},
+			headers: { 'X-WP-Nonce': aipgData.nonce },
 			contentType: 'application/json',
 			data: JSON.stringify(data),
 			success: function (response) {
-				generatedCode = response.code;
+				parsedFiles = parseMultiFileResponse(response.code, data.slug);
 				pluginData = response.plugin_data;
+				codeEditable = false;
 
-				$('#aipg-code-output').text(response.code);
-				$('#aipg-preview-placeholder').hide();
-				$('#aipg-preview-code').show();
+				renderFileTabs(parsedFiles);
+
+				$('#aipg-preview-loading').hide();
+				$('#aipg-preview-content').show();
 				$('#aipg-confirm-actions').show();
+				$('#aipg-edit-code-btn').show().find('span:last').text('Edit');
 
 				showNotice('Code generated successfully! Review and confirm.', 'success');
 			},
 			error: function (xhr) {
-				var msg = xhr.responseJSON && xhr.responseJSON.message
-					? xhr.responseJSON.message
-					: aipgData.i18n.error;
-				showNotice(msg, 'error');
+				$('#aipg-preview-loading').hide();
+				$('#aipg-preview-placeholder').show();
+				showNotice(getErrorMessage(xhr), 'error');
 			},
 			complete: function () {
 				$btn.prop('disabled', false);
@@ -91,61 +138,199 @@
 
 	function confirmPlugin() {
 		var $btn = $('#aipg-confirm-btn');
-
 		$btn.prop('disabled', true);
 		showNotice(aipgData.i18n.saving, 'info');
 
-		$.ajax({
-			url: aipgData.restUrl + 'plugins/0/confirm',
-			method: 'POST',
-			headers: {
-				'X-WP-Nonce': aipgData.nonce
-			},
-			contentType: 'application/json',
-			data: JSON.stringify({
-				code: generatedCode,
-				plugin_data: pluginData
-			}),
-			success: function () {
-				showNotice('Plugin saved successfully! <a href="' + adminUrl('admin.php?page=aipg-plugins') + '">View all plugins</a>', 'success');
-				$('#aipg-confirm-actions').hide();
+		// Collect current code from textareas if editable, or from parsedFiles.
+		var files = collectFiles();
 
-				// Reset form.
-				$('#aipg-create-form')[0].reset();
-				$('#aipg-preview-code').hide();
-				$('#aipg-preview-placeholder').show();
-				generatedCode = '';
-				pluginData = {};
-			},
-			error: function (xhr) {
-				var msg = xhr.responseJSON && xhr.responseJSON.message
-					? xhr.responseJSON.message
-					: aipgData.i18n.error;
-				showNotice(msg, 'error');
-			},
-			complete: function () {
-				$btn.prop('disabled', false);
+		if (editMode) {
+			// Update existing plugin with regenerated zip.
+			$.ajax({
+				url: aipgData.restUrl + 'plugins/' + editId + '/confirm',
+				method: 'POST',
+				headers: { 'X-WP-Nonce': aipgData.nonce },
+				contentType: 'application/json',
+				data: JSON.stringify({
+					files: files,
+					plugin_data: pluginData
+				}),
+				success: function () {
+					showNotice('Plugin updated successfully! <a href="' + adminUrl('admin.php?page=aipg-plugins') + '">View all plugins</a>', 'success');
+				},
+				error: function (xhr) {
+					showNotice(getErrorMessage(xhr), 'error');
+				},
+				complete: function () {
+					$btn.prop('disabled', false);
+				}
+			});
+		} else {
+			$.ajax({
+				url: aipgData.restUrl + 'plugins/0/confirm',
+				method: 'POST',
+				headers: { 'X-WP-Nonce': aipgData.nonce },
+				contentType: 'application/json',
+				data: JSON.stringify({
+					files: files,
+					plugin_data: pluginData
+				}),
+				success: function () {
+					showNotice('Plugin saved successfully! <a href="' + adminUrl('admin.php?page=aipg-plugins') + '">View all plugins</a>', 'success');
+					$('#aipg-confirm-actions').hide();
+					$('#aipg-edit-code-btn').hide();
+					$('#aipg-create-form')[0].reset();
+					$('#aipg-preview-content').hide();
+					$('#aipg-preview-placeholder').show();
+					parsedFiles = [];
+					pluginData = {};
+				},
+				error: function (xhr) {
+					showNotice(getErrorMessage(xhr), 'error');
+				},
+				complete: function () {
+					$btn.prop('disabled', false);
+				}
+			});
+		}
+	}
+
+	function collectFiles() {
+		var files = [];
+		if (codeEditable) {
+			// Read from textareas.
+			$('.aipg-code-textarea').each(function () {
+				files.push({
+					filename: $(this).data('filename'),
+					code: $(this).val()
+				});
+			});
+		} else {
+			files = parsedFiles;
+		}
+		return files;
+	}
+
+	/**
+	 * Parse AI response into separate files.
+	 * Looks for === filename.ext === patterns followed by ```lang code blocks.
+	 * Falls back to a single file if no pattern found.
+	 */
+	function parseMultiFileResponse(raw, slug) {
+		var files = [];
+		// Pattern: === filename === followed by ```code```
+		var regex = /===\s*(.+?)\s*===\s*```[\w]*\n([\s\S]*?)```/g;
+		var match;
+
+		while ((match = regex.exec(raw)) !== null) {
+			files.push({
+				filename: match[1].trim(),
+				code: match[2].trim()
+			});
+		}
+
+		if (files.length === 0) {
+			// Try just extracting code blocks.
+			var codeRegex = /```[\w]*\n([\s\S]*?)```/g;
+			var codeMatch;
+			var index = 0;
+
+			while ((codeMatch = codeRegex.exec(raw)) !== null) {
+				var filename = index === 0 ? slug + '.php' : 'file-' + (index + 1) + '.php';
+				files.push({
+					filename: filename,
+					code: codeMatch[1].trim()
+				});
+				index++;
 			}
+		}
+
+		if (files.length === 0) {
+			// Raw code, no markdown blocks.
+			files.push({
+				filename: slug + '.php',
+				code: raw.trim()
+			});
+		}
+
+		return files;
+	}
+
+	function renderFileTabs(files) {
+		var $tabs = $('#aipg-file-tabs');
+		var $panels = $('#aipg-code-panels');
+		$tabs.empty();
+		$panels.empty();
+
+		$.each(files, function (i, file) {
+			// Tab.
+			var activeClass = i === 0 ? ' active' : '';
+			$tabs.append(
+				'<button type="button" class="aipg-file-tab' + activeClass + '" data-index="' + i + '">' +
+				'<span class="dashicons dashicons-media-code"></span> ' +
+				escHtml(file.filename) +
+				'</button>'
+			);
+
+			// Panel — code display (pre/code) and hidden textarea for editing.
+			var displayStyle = i === 0 ? '' : ' style="display:none;"';
+			$panels.append(
+				'<div class="aipg-code-panel" data-index="' + i + '"' + displayStyle + '>' +
+				'<div class="aipg-code-display"><pre><code>' + escHtml(file.code) + '</code></pre></div>' +
+				'<textarea class="aipg-code-textarea" data-filename="' + escHtml(file.filename) + '" style="display:none;">' + escHtml(file.code) + '</textarea>' +
+				'</div>'
+			);
 		});
 	}
 
+	function switchTab(index) {
+		$('.aipg-file-tab').removeClass('active');
+		$('.aipg-file-tab[data-index="' + index + '"]').addClass('active');
+		$('.aipg-code-panel').hide();
+		$('.aipg-code-panel[data-index="' + index + '"]').show();
+	}
+
+	function toggleCodeEditing() {
+		codeEditable = !codeEditable;
+
+		if (codeEditable) {
+			$('.aipg-code-display').hide();
+			$('.aipg-code-textarea').show();
+			$('#aipg-edit-code-btn').addClass('active').find('span:last').text('Preview');
+		} else {
+			// Sync textarea content back to code display.
+			$('.aipg-code-textarea').each(function () {
+				var $panel = $(this).closest('.aipg-code-panel');
+				$panel.find('.aipg-code-display pre code').text($(this).val());
+			});
+			$('.aipg-code-textarea').hide();
+			$('.aipg-code-display').show();
+			$('#aipg-edit-code-btn').removeClass('active').find('span:last').text('Edit');
+		}
+	}
+
 	function adminUrl(path) {
-		// Build admin URL from REST URL.
 		var base = aipgData.restUrl.split('/wp-json/')[0];
 		return base + '/wp-admin/' + path;
 	}
 
 	function showNotice(message, type) {
-		var $notice = $('#aipg-notice');
-		$notice
-			.removeClass('aipg-notice-hidden success error info')
-			.addClass(type)
-			.show();
+		$('#aipg-notice').removeClass('aipg-notice-hidden success error info').addClass(type).show();
 		$('#aipg-notice-text').html(message);
 	}
 
 	function hideNotice() {
 		$('#aipg-notice').addClass('aipg-notice-hidden').hide();
+	}
+
+	function getErrorMessage(xhr) {
+		return (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : aipgData.i18n.error;
+	}
+
+	function escHtml(str) {
+		var div = document.createElement('div');
+		div.appendChild(document.createTextNode(str));
+		return div.innerHTML;
 	}
 
 })(jQuery);
