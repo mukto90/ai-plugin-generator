@@ -1,0 +1,17 @@
+I want to create a wordpress plugin that can create plugins.
+- an admin interface to create new plugin
+	- plugin name
+	- slug (auto-generated and editable)
+	- requiremetns
+	- optionally author name, version, dependencies, description etc headers
+	- after clicking the "generate plugin" button, it shows the generated code and a confirm button (idea: form can be at left and code preview at right)
+	- after confirming, a zip is created and stored in db and file system
+- an admin interface to list (perhaps using WP_List_Table) created plugins with options to
+	- download zip
+	- edit a plugin requirements and regenarate
+	- install on the current site
+	- activate/deactivate
+	- delete
+- settings
+	- api credential with provider like OpenAI, DeekSeek, Gemini etc
+- use nice UI, add AI-flavour
