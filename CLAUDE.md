@@ -6,7 +6,7 @@ A WordPress plugin that lets admins generate other WordPress plugins using AI. U
 
 This repo also contains two sibling deliverables that are **not shipped** with the main plugin and are deployed separately:
 - `website/` — the marketing landing page for plugindaddy.com
-- `service/` — the WordPress plugin that runs on plugindaddy.com, built on WordPress + Easy Digital Downloads + EDD Recurring Payments. Receives generate requests, authenticates via API key, forwards to real AI providers (OpenAI, DeepSeek, Claude), and returns the response.
+- `service/` — the WordPress plugin that runs on plugindaddy.com, built on WordPress + Easy Digital Downloads + EDD Recurring Payments. It authenticates requests, manages WP user accounts + credits, routes generation calls to real AI providers (OpenAI, DeepSeek, Claude) based on free/paid tier, and returns the response.
 
 ## Requirements Summary
 
@@ -106,6 +106,7 @@ This repo also contains two sibling deliverables that are **not shipped** with t
 ### Zip Building
 - `Zip_Builder` accepts an array of `{filename, code}` objects (multi-file) or a raw string (single file fallback)
 - Files placed inside a directory matching the plugin slug: `slug/filename.php`
+- `normalize_filename()` strips leading/trailing slashes, `./` and `..` segments, and any leading `{slug}/` prefix the AI may have added — prevents double-nested zips like `slug/slug/slug.php` that WP's installer rejects with "No valid plugins were found"
 
 ### Plugin Install/Replace/Delete Flow
 - `Plugin_Installer::install()` — uses `Plugin_Upgrader` to install from zip
@@ -152,14 +153,19 @@ ai-plugin-generator/
       style.css
       script.js
   service/                         # NOT shipped — separate WP plugin hosted on plugindaddy.com
-    plugindaddy-service.php        # Main plugin file
+    plugindaddy-service.php        # Main plugin file, bootstrap, autoloader, EDD-required guard, defaults
     includes/
-      Plugin.php                   # Bootstrap
+      Plugin.php                   # Bootstrap (rest_api_init, EDD_Integration, Admin)
+      Installer.php                # Creates {prefix}plugindaddy_credits and _plugins tables; drops legacy
       Rest_Controller.php          # /plugindaddy/v1/plugin/generate, /keys/request, /keys/verify
-      Key_Manager.php              # Issues, emails, verifies API keys; ties keys to EDD customers
-      AI_Router.php                # Chooses provider (OpenAI/DeepSeek/Claude) and forwards the request
+      User_Manager.php             # Transient-to-user flow; WP user creation on verify; key hash in user meta
+      Credit_Manager.php           # Free (rolling window) + paid (grants − usage) balance; tier selection
+      Plugin_Log.php               # Writes a row to plugindaddy_plugins on successful generation
       Prompt_Builder.php           # System + user prompts (WPCS rules, multi-file format, self-review)
-      EDD_Integration.php          # EDD + EDD Recurring hooks: issue key on purchase, revoke on cancel
+      AI_Router.php                # Picks provider + model per tier from settings
+      EDD_Integration.php          # Variable-price "Credits" field; grants on purchase + renewal
+      Admin.php                    # PluginDaddy menu, Settings page, Plugins Log page
+      Plugins_List_Table.php       # WP_List_Table implementation for the plugins log
       Providers/
         AI_Provider.php            # Abstract base
         OpenAI.php
@@ -186,17 +192,62 @@ ai-plugin-generator/
 
 ## Service (plugindaddy.com) — separate plugin under `service/`
 
-This is a standalone WordPress plugin deployed to plugindaddy.com. Not shipped with the main plugin.
+This is a standalone WordPress plugin deployed to plugindaddy.com. Not shipped with the main plugin. Versioned independently; DB schema version tracked via the `plugindaddy_service_db_version` option.
 
 - **Stack**: WordPress + Easy Digital Downloads + EDD Recurring Payments
-- **Purpose**: authenticate incoming requests by API key, build the full prompt, forward to a real AI provider (OpenAI/DeepSeek/Claude), return the response
-- **REST namespace**: `plugindaddy/v1`
-  - `POST /plugin/generate` — body: `{ api_key, email, requirements, meta }`. Verifies key, builds prompt, calls AI, returns raw AI text.
-  - `POST /keys/request` — body: `{ email }`. Generates a key, stores it, emails it to the address. Returns success regardless of whether email exists (to avoid enumeration).
-  - `POST /keys/verify` — body: `{ email, api_key }`. Returns `{ valid: bool, plan: string, expires_at }`.
-- **Key lifecycle**: keys are issued on EDD purchase (one-off or subscription), stored against the customer, revoked on subscription cancel/expiry via EDD Recurring hooks. Anonymous `/keys/request` may issue a trial-tier key.
-- **Prompts live here**: all system prompts (WPCS rules, no-Composer constraint, multi-file `=== filename ===` format, self-review instructions, clean-UI guidance) belong to `Prompt_Builder` in the service, not the main plugin
-- **Provider selection**: `AI_Router` picks the provider based on the key's plan/config; the main plugin has no say
+- **Required plugin**: EDD is declared via the `Requires Plugins` header and enforced by a `plugins_loaded` guard — the service refuses to boot and shows an admin error notice if EDD is not active
+- **Purpose**: authenticate incoming requests, enforce per-user credit quotas (free + paid), build the full prompt, forward to the configured real AI provider, log successful generations
+
+### REST API (`plugindaddy/v1`)
+- `POST /plugin/generate` — body: `{ api_key, email, requirements, meta }`. Authenticates via `User_Manager::authenticate()`, asks `Credit_Manager::select_tier_to_charge()` for a free→paid preference, dispatches via `AI_Router`, logs a row in `plugindaddy_plugins` on success. Returns `{ code: "<raw AI text>" }`.
+- `POST /keys/request` — body: `{ email }`. Generates a key, stores it in a **transient** keyed by email hash (10-minute TTL), `error_log`s it for testing, emails it via `wp_mail` with a `From:` header. No WP user is created at this stage.
+- `POST /keys/verify` — body: `{ email, api_key }`. Looks up the transient; on match, creates a WP user (`subscriber` role) if one doesn't exist for that email, stores `sha256($key)` in the `_plugindaddy_api_key_hash` user meta, clears the transient. Returns `{ valid, user_id, free_available, paid_available }`.
+
+### Accounts & API keys (`User_Manager`)
+- The WP user is the canonical identifier; the `user_id` is used everywhere downstream (credits, logs)
+- Re-requesting a key for an existing email **rotates** it: the transient overwrites, and on next verify the user-meta hash is overwritten too
+- `authenticate( email, api_key )` = look up user by email → `hash_equals` against stored hash → return user_id or `WP_Error`
+- Testing: `issue_and_email()` calls `error_log( '[PluginDaddy] Issued pending key to <email>: <key>' )` so keys can be grabbed from the PHP log without inbox access
+
+### Credits (`Credit_Manager`)
+- Two buckets per user, computed on the fly:
+  - **Free** = `free_allowance − COUNT(plugins WHERE user_id=X AND tier='free' AND created_at > NOW() − INTERVAL <free_period>)`. Rolling window, not calendar-based.
+  - **Paid** = `SUM(credits.amount WHERE user_id=X AND tier='paid') − COUNT(plugins WHERE user_id=X AND tier='paid')`
+- `select_tier_to_charge()` → `'free'` if available, else `'paid'`, else `null` (→ 429)
+- Credits never expire and have no `used` column — usage is implicit from the plugins log
+- `grant_paid( user_id, amount, meta )` inserts a single ledger row (source: `edd_purchase` / `edd_renewal` / `manual`)
+- Free allowance defaults come from constants in `plugindaddy-service.php`: `PLUGINDADDY_FREE_ALLOWANCE_DEFAULT` (int) and `PLUGINDADDY_FREE_PERIOD_DEFAULT` (`day|week|month|year`), both overridable via `wp-config.php` and via settings
+
+### AI routing (`AI_Router`)
+- Takes a tier string (`free`/`paid`) and picks provider + model from settings: `{tier}_provider` + `{tier}_model`
+- Admin chooses each tier's provider independently (e.g. free → DeepSeek, paid → OpenAI or Claude)
+- Returns `{ provider_slug, text }` so the caller can record which provider answered
+- All system prompts (WPCS rules, no-Composer constraint, multi-file `=== filename ===` format, flat-filename rule, self-review instructions, clean-UI guidance) live in `Prompt_Builder` in the service, not the main plugin
+
+### EDD integration
+- A single EDD download is designated as the "credits product" via the settings page (`edd_product_id`)
+- Each variable price on that download gets an extra **Credits** field rendered via `edd_download_price_table_head` + `edd_download_price_table_row`, stored as `_edd_variable_prices[price_id][plugindaddy_credits]` — EDD persists it alongside its own fields
+- `edd_complete_purchase` walks the cart, matches the configured product_id, looks up the purchased `price_id`'s credit amount, calls `User_Manager::find_or_create_user( buyer_email )`, and `Credit_Manager::grant_paid()`
+- `edd_subscription_post_renew` does the same with `source='edd_renewal'`
+- **Purchases never issue or email API keys** — they only add credit ledger rows. Users still obtain their key via the /keys/request → /keys/verify flow
+
+### Custom tables
+- `{prefix}plugindaddy_credits` — grants ledger (paid only in practice; schema supports `tier`=`free` for future manual grants)
+  - `id, user_id, tier, amount, source, edd_payment_id, edd_price_id, note, created_at`
+- `{prefix}plugindaddy_plugins` — log of successfully generated plugins; each row doubles as a credit-consumption marker
+  - `id, user_id, plugin_name, plugin_slug, description, tier, provider, created_at`
+- `Installer::maybe_upgrade()` runs on `plugins_loaded` and `dbDelta`s both tables when the version option changes; also drops the legacy 1.x tables (`plugindaddy_keys`, `plugindaddy_requests`) and the `plugindaddy_keys` option
+
+### Admin UI (`Admin.php`, `Plugins_List_Table.php`)
+- Top-level **PluginDaddy** menu at position 58 with two submenus:
+  - **Settings** — Provider credentials (OpenAI / DeepSeek / Claude API keys), Free tier (allowance + `day/week/month/year` selector + provider + model override), Paid tier (provider + model override), EDD product selector (dropdown of all `download` posts)
+  - **Plugins Log** — WP_List_Table showing: User (display name + email, linked to user edit), Plugin (name + slug), Description (truncated 240 chars), Tier (color-coded Free/Paid), Provider, Created. Sortable by plugin_name / tier / created_at. Paginated 20/page.
+- Settings stored in the `plugindaddy_service_settings` option; all fields sanitized with whitelist-based fallbacks
+
+### Constants (service plugin file)
+- `PLUGINDADDY_SERVICE_VERSION`, `PLUGINDADDY_SERVICE_FILE`, `PLUGINDADDY_SERVICE_PATH`, `PLUGINDADDY_SERVICE_URL`
+- `PLUGINDADDY_FREE_ALLOWANCE_DEFAULT` (default `1`) — can be overridden in `wp-config.php`
+- `PLUGINDADDY_FREE_PERIOD_DEFAULT` (default `'month'`) — can be overridden in `wp-config.php`
 
 ## Website (`website/`)
 
