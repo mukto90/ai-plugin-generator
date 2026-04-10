@@ -39,6 +39,7 @@ class Zip_Builder {
 			foreach ( $files as $file ) {
 				$filename = isset( $file['filename'] ) ? $file['filename'] : $slug . '.php';
 				$code     = isset( $file['code'] ) ? $file['code'] : '';
+				$filename = $this->normalize_filename( $filename, $slug );
 				$zip->addFromString( $slug . '/' . $filename, $code );
 			}
 		} else {
@@ -49,5 +50,34 @@ class Zip_Builder {
 		$zip->close();
 
 		return $zip_path;
+	}
+
+	/**
+	 * Normalize an AI-returned filename so it's safe to drop under slug/.
+	 *
+	 * Strips backslashes, leading slashes, "./" segments, ".." traversal,
+	 * and any leading "{slug}/" the AI may have added on its own.
+	 */
+	private function normalize_filename( $filename, $slug ) {
+		$filename = str_replace( '\\', '/', (string) $filename );
+		$filename = ltrim( $filename, '/' );
+
+		$parts = array();
+		foreach ( explode( '/', $filename ) as $part ) {
+			if ( '' === $part || '.' === $part || '..' === $part ) {
+				continue;
+			}
+			$parts[] = $part;
+		}
+
+		if ( ! empty( $parts ) && $parts[0] === $slug ) {
+			array_shift( $parts );
+		}
+
+		if ( empty( $parts ) ) {
+			return $slug . '.php';
+		}
+
+		return implode( '/', $parts );
 	}
 }

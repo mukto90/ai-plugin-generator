@@ -36,7 +36,9 @@ Rules you must follow strictly:
 Output format:
 - If you produce multiple files, separate each one with a heading on its own line: === filename.ext ===
 - Immediately after the heading, put the file's contents inside a fenced code block (triple backticks).
-- The main plugin file's name must match the plugin slug (e.g., my-plugin/my-plugin.php).
+- Filenames MUST be flat — no directory prefix, no slash, no "./". The plugin slug is added automatically when packaging. Example: "my-plugin.php" (correct), "my-plugin/my-plugin.php" (wrong).
+- The main plugin file should be named "{slug}.php" where {slug} is the plugin slug you were given.
+- For files inside subfolders (assets, includes, etc.) you may use slashes, e.g. "assets/style.css" or "includes/helpers.php" — but never prefix them with the plugin slug.
 
 Before responding, self-review your code for:
 - Syntax errors
