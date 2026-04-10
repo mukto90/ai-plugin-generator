@@ -1,6 +1,7 @@
 <?php
 /**
- * Chooses an AI provider based on the API key's plan and forwards the prompt.
+ * Picks an AI provider + model based on whether the caller is on the
+ * free or paid tier, then dispatches the prompt.
  *
  * @package PluginDaddy_Service
  */
@@ -16,25 +17,60 @@ defined( 'ABSPATH' ) || exit;
 
 class AI_Router {
 
-	public function dispatch( array $ctx, array $prompt ) {
-		$provider = $this->pick_provider( $ctx );
+	/**
+	 * @param string $tier   'free' | 'paid'
+	 * @param array  $prompt { system, user }
+	 * @return array|\WP_Error { provider_slug, text }
+	 */
+	public function dispatch( $tier, array $prompt ) {
+		$provider = $this->pick_provider( $tier );
 		if ( ! $provider ) {
-			return new \WP_Error( 'plugindaddy_no_provider', __( 'No AI provider is configured.', 'plugindaddy-service' ), array( 'status' => 500 ) );
+			return new \WP_Error( 'plugindaddy_no_provider', __( 'No AI provider is configured for this tier. Please contact the administrator.', 'plugindaddy-service' ), array( 'status' => 500 ) );
 		}
-		return $provider->generate( $prompt['system'], $prompt['user'] );
+
+		$text = $provider->generate( $prompt['system'], $prompt['user'] );
+		if ( is_wp_error( $text ) ) {
+			return $text;
+		}
+
+		return array(
+			'provider_slug' => $provider->get_slug(),
+			'text'          => $text,
+		);
 	}
 
-	private function pick_provider( array $ctx ) {
+	private function pick_provider( $tier ) {
 		$settings = get_option( 'plugindaddy_service_settings', array() );
 
-		switch ( $ctx['plan'] ) {
-			case 'studio':
-				return new Claude( $settings );
-			case 'pro':
-				return new OpenAI( $settings );
-			case 'trial':
-			default:
-				return new DeepSeek( $settings );
+		$provider_key = ( 'paid' === $tier ) ? 'paid_provider' : 'free_provider';
+		$model_key    = ( 'paid' === $tier ) ? 'paid_model' : 'free_model';
+
+		$slug  = isset( $settings[ $provider_key ] ) ? $settings[ $provider_key ] : '';
+		$model = isset( $settings[ $model_key ] ) ? $settings[ $model_key ] : '';
+
+		$class = $this->class_for_slug( $slug );
+		if ( ! $class ) {
+			return null;
 		}
+
+		// The tier's model override is injected as {slug}_model so the
+		// base class picks it up in its constructor.
+		if ( ! empty( $model ) ) {
+			$settings[ $slug . '_model' ] = $model;
+		}
+
+		return new $class( $settings );
+	}
+
+	private function class_for_slug( $slug ) {
+		switch ( $slug ) {
+			case 'openai':
+				return OpenAI::class;
+			case 'deepseek':
+				return DeepSeek::class;
+			case 'claude':
+				return Claude::class;
+		}
+		return null;
 	}
 }

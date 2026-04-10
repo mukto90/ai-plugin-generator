@@ -59,122 +59,80 @@ class Rest_Controller {
 	}
 
 	public function generate( \WP_REST_Request $request ) {
-		$started = microtime( true );
 		$email   = sanitize_email( $request->get_param( 'email' ) );
 		$api_key = sanitize_text_field( $request->get_param( 'api_key' ) );
 		$reqs    = wp_kses_post( $request->get_param( 'requirements' ) );
 		$meta    = (array) $request->get_param( 'meta' );
 
-		$log = new Request_Log();
-		$log_base = array(
-			'email'        => $email,
-			'plugin_name'  => isset( $meta['name'] ) ? (string) $meta['name'] : '',
-			'plugin_slug'  => isset( $meta['slug'] ) ? (string) $meta['slug'] : '',
-			'requirements' => $reqs,
-		);
-
-		$keys = new Key_Manager();
-		$ctx  = $keys->verify( $email, $api_key );
-		if ( is_wp_error( $ctx ) ) {
-			$log->record(
-				array_merge(
-					$log_base,
-					array(
-						'status'        => 'error',
-						'error_code'    => $ctx->get_error_code(),
-						'error_message' => $ctx->get_error_message(),
-						'duration_ms'   => (int) ( ( microtime( true ) - $started ) * 1000 ),
-					)
-				)
-			);
-			return $ctx;
+		$users   = new User_Manager();
+		$user_id = $users->authenticate( $email, $api_key );
+		if ( is_wp_error( $user_id ) ) {
+			return $user_id;
 		}
 
-		$log_base['key_id'] = isset( $ctx['id'] ) && is_int( $ctx['id'] ) ? (int) $ctx['id'] : 0;
-		$log_base['plan']   = isset( $ctx['plan'] ) ? (string) $ctx['plan'] : '';
-
-		if ( ! $keys->consume_quota( $ctx ) ) {
-			$log->record(
-				array_merge(
-					$log_base,
-					array(
-						'status'        => 'error',
-						'error_code'    => 'plugindaddy_quota',
-						'error_message' => 'Quota exceeded',
-						'duration_ms'   => (int) ( ( microtime( true ) - $started ) * 1000 ),
-					)
-				)
+		$credits = new Credit_Manager();
+		$tier    = $credits->select_tier_to_charge( $user_id );
+		if ( null === $tier ) {
+			return new \WP_Error(
+				'plugindaddy_quota',
+				__( 'You have no credits remaining. Please purchase a plan or wait for your free allowance to refresh.', 'plugindaddy-service' ),
+				array( 'status' => 429 )
 			);
-			return new \WP_Error( 'plugindaddy_quota', __( 'Quota exceeded for this API key.', 'plugindaddy-service' ), array( 'status' => 429 ) );
 		}
 
-		$prompt = ( new Prompt_Builder() )->build( $reqs, $meta );
-		$router = new AI_Router();
-		$result = $router->dispatch( $ctx, $prompt );
-
-		if ( is_wp_error( $result ) ) {
-			$log->record(
-				array_merge(
-					$log_base,
-					array(
-						'status'        => 'error',
-						'error_code'    => $result->get_error_code(),
-						'error_message' => $result->get_error_message(),
-						'duration_ms'   => (int) ( ( microtime( true ) - $started ) * 1000 ),
-					)
-				)
-			);
-			return $result;
+		$prompt   = ( new Prompt_Builder() )->build( $reqs, $meta );
+		$router   = new AI_Router();
+		$dispatch = $router->dispatch( $tier, $prompt );
+		if ( is_wp_error( $dispatch ) ) {
+			return $dispatch;
 		}
 
-		$log->record(
-			array_merge(
-				$log_base,
-				array(
-					'status'         => 'success',
-					'response_bytes' => strlen( (string) $result ),
-					'duration_ms'    => (int) ( ( microtime( true ) - $started ) * 1000 ),
-				)
+		// Only successful generations are logged; a log row is the credit
+		// consumption record that Credit_Manager reads.
+		( new Plugin_Log() )->record(
+			array(
+				'user_id'     => $user_id,
+				'plugin_name' => isset( $meta['name'] ) ? (string) $meta['name'] : '',
+				'plugin_slug' => isset( $meta['slug'] ) ? (string) $meta['slug'] : '',
+				'description' => $reqs,
+				'tier'        => $tier,
+				'provider'    => $dispatch['provider_slug'],
 			)
 		);
 
 		return rest_ensure_response(
-			array(
-				'code' => $result,
-			)
+			array( 'code' => $dispatch['text'] )
 		);
 	}
 
 	public function request_key( \WP_REST_Request $request ) {
 		$email = sanitize_email( $request->get_param( 'email' ) );
-		if ( ! is_email( $email ) ) {
-			return new \WP_Error( 'plugindaddy_invalid_email', __( 'Invalid email address.', 'plugindaddy-service' ), array( 'status' => 400 ) );
-		}
 
-		$result = ( new Key_Manager() )->issue_and_email( $email );
+		$result = ( new User_Manager() )->issue_and_email( $email );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
 
-		return rest_ensure_response(
-			array( 'ok' => true )
-		);
+		return rest_ensure_response( array( 'ok' => true ) );
 	}
 
 	public function verify_key( \WP_REST_Request $request ) {
 		$email   = sanitize_email( $request->get_param( 'email' ) );
 		$api_key = sanitize_text_field( $request->get_param( 'api_key' ) );
 
-		$ctx = ( new Key_Manager() )->verify( $email, $api_key );
-		if ( is_wp_error( $ctx ) ) {
-			return $ctx;
+		$users  = new User_Manager();
+		$result = $users->verify_and_provision( $email, $api_key );
+		if ( is_wp_error( $result ) ) {
+			return $result;
 		}
 
+		$credits = new Credit_Manager();
 		return rest_ensure_response(
 			array(
-				'valid'      => true,
-				'plan'       => $ctx['plan'],
-				'expires_at' => $ctx['expires_at'],
+				'valid'          => true,
+				'user_id'        => $result['user_id'],
+				'free_available' => $credits->free_available( $result['user_id'] ),
+				'paid_available' => $credits->paid_available( $result['user_id'] ),
 			)
 		);
 	}

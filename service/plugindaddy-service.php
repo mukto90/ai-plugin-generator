@@ -14,10 +14,17 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'PLUGINDADDY_SERVICE_VERSION', '0.1.0' );
+define( 'PLUGINDADDY_SERVICE_VERSION', '0.2.0' );
 define( 'PLUGINDADDY_SERVICE_FILE', __FILE__ );
 define( 'PLUGINDADDY_SERVICE_PATH', plugin_dir_path( __FILE__ ) );
 define( 'PLUGINDADDY_SERVICE_URL', plugin_dir_url( __FILE__ ) );
+
+if ( ! defined( 'PLUGINDADDY_FREE_ALLOWANCE_DEFAULT' ) ) {
+	define( 'PLUGINDADDY_FREE_ALLOWANCE_DEFAULT', 1 );
+}
+if ( ! defined( 'PLUGINDADDY_FREE_PERIOD_DEFAULT' ) ) {
+	define( 'PLUGINDADDY_FREE_PERIOD_DEFAULT', 'month' );
+}
 
 spl_autoload_register(
 	function ( $class ) {
