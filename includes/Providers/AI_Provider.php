@@ -20,7 +20,7 @@ abstract class AI_Provider {
 	 *
 	 * @var int
 	 */
-	protected $generate_timeout = 300;
+	protected $generate_timeout = 3000;
 
 	/**
 	 * Timeout in seconds for validation API calls.
