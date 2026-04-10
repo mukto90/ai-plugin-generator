@@ -142,6 +142,24 @@ class Rest_Controller {
 			)
 		);
 
+		// Request API key from PluginDaddy.
+		register_rest_route(
+			$this->namespace,
+			'/settings/request-key',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'request_api_key' ),
+				'permission_callback' => array( $this, 'check_admin' ),
+				'args'                => array(
+					'email' => array(
+						'required'          => true,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_email',
+					),
+				),
+			)
+		);
+
 		// Slug check.
 		register_rest_route(
 			$this->namespace,
@@ -160,16 +178,6 @@ class Rest_Controller {
 			)
 		);
 
-		// Providers list.
-		register_rest_route(
-			$this->namespace,
-			'/providers',
-			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_providers' ),
-				'permission_callback' => array( $this, 'check_admin' ),
-			)
-		);
 	}
 
 	/**
@@ -563,51 +571,74 @@ class Rest_Controller {
 	}
 
 	/**
-	 * GET /settings
+	 * GET /settings — returns email + masked api key.
 	 */
 	public function get_settings() {
 		$settings = get_option( 'aipg_settings', array() );
 
-		// Mask API key for security.
-		if ( ! empty( $settings['api_key'] ) ) {
-			$key = $settings['api_key'];
-			$settings['api_key_masked'] = substr( $key, 0, 4 ) . str_repeat( '*', max( 0, strlen( $key ) - 8 ) ) . substr( $key, -4 );
-			$settings['has_api_key']    = true;
-		} else {
-			$settings['api_key_masked'] = '';
-			$settings['has_api_key']    = false;
+		$email   = isset( $settings['email'] ) ? $settings['email'] : '';
+		$api_key = isset( $settings['api_key'] ) ? $settings['api_key'] : '';
+
+		$response = array(
+			'email'          => $email,
+			'has_api_key'    => ! empty( $api_key ),
+			'api_key_masked' => '',
+		);
+
+		if ( ! empty( $api_key ) ) {
+			$response['api_key_masked'] = substr( $api_key, 0, 4 ) . str_repeat( '*', max( 0, strlen( $api_key ) - 8 ) ) . substr( $api_key, -4 );
 		}
 
-		unset( $settings['api_key'] );
-
-		return new WP_REST_Response( $settings, 200 );
+		return new WP_REST_Response( $response, 200 );
 	}
 
 	/**
-	 * PUT /settings
+	 * PUT /settings — verifies the email + api_key against PluginDaddy, then saves.
 	 */
 	public function update_settings( WP_REST_Request $request ) {
-		$settings = get_option( 'aipg_settings', array() );
+		$email   = sanitize_email( (string) $request->get_param( 'email' ) );
+		$api_key = sanitize_text_field( (string) $request->get_param( 'api_key' ) );
 
-		$provider = $request->get_param( 'provider' );
-		if ( null !== $provider ) {
-			$settings['provider'] = sanitize_text_field( $provider );
+		if ( ! is_email( $email ) ) {
+			return new WP_Error( 'aipg_invalid_email', __( 'Please enter a valid email address.', 'ai-plugin-generator' ), array( 'status' => 400 ) );
+		}
+		if ( empty( $api_key ) ) {
+			return new WP_Error( 'aipg_missing_api_key', __( 'API key is required.', 'ai-plugin-generator' ), array( 'status' => 400 ) );
 		}
 
-		$api_key = $request->get_param( 'api_key' );
-		if ( null !== $api_key && ! empty( $api_key ) ) {
-			$settings['api_key'] = sanitize_text_field( $api_key );
+		$client   = new Service_Client();
+		$verified = $client->verify_key( $email, $api_key );
+		if ( is_wp_error( $verified ) ) {
+			return $verified;
 		}
 
-		$model = $request->get_param( 'model' );
-		if ( null !== $model ) {
-			$settings['model'] = sanitize_text_field( $model );
-		}
+		update_option(
+			'aipg_settings',
+			array(
+				'email'   => $email,
+				'api_key' => $api_key,
+			)
+		);
 
-		update_option( 'aipg_settings', $settings );
-
-		// Return masked settings.
 		return $this->get_settings();
+	}
+
+	/**
+	 * POST /settings/request-key — asks PluginDaddy to email a new key.
+	 */
+	public function request_api_key( WP_REST_Request $request ) {
+		$email = sanitize_email( (string) $request->get_param( 'email' ) );
+		if ( ! is_email( $email ) ) {
+			return new WP_Error( 'aipg_invalid_email', __( 'Please enter a valid email address.', 'ai-plugin-generator' ), array( 'status' => 400 ) );
+		}
+
+		$client = new Service_Client();
+		$result = $client->request_key( $email );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return new WP_REST_Response( array( 'sent' => true, 'email' => $email ), 200 );
 	}
 
 	/**
@@ -650,13 +681,6 @@ class Rest_Controller {
 			),
 			200
 		);
-	}
-
-	/**
-	 * GET /providers
-	 */
-	public function get_providers() {
-		return new WP_REST_Response( Code_Generator::get_available_providers(), 200 );
 	}
 
 	/**

@@ -25,6 +25,10 @@ define( 'AIPG_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AIPG_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AIPG_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 
+if ( ! defined( 'AIPG_SERVICE_URL' ) ) {
+	define( 'AIPG_SERVICE_URL', 'https://plugindaddy.com' );
+}
+
 /**
  * Composer autoloader.
  */

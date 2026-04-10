@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>PluginDaddy — Generate WordPress Plugins with AI</title>
+	<meta name="description" content="Describe the plugin you need. PluginDaddy writes it. Install with one click.">
+	<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+	<header class="site-header">
+		<div class="container header-inner">
+			<a class="brand" href="#">
+				<span class="brand-mark">PD</span>
+				<span class="brand-name">PluginDaddy</span>
+			</a>
+			<nav class="site-nav">
+				<a href="#features">Features</a>
+				<a href="#how">How it works</a>
+				<a href="#pricing">Pricing</a>
+				<a class="btn btn-ghost" href="#get-started">Sign in</a>
+				<a class="btn btn-primary" href="#get-started">Get API key</a>
+			</nav>
+		</div>
+	</header>
+
+	<main>
+		<section class="hero">
+			<div class="container hero-inner">
+				<p class="eyebrow">AI-powered WordPress plugin factory</p>
+				<h1>Describe it. Ship it.<br>Plugins, written by AI.</h1>
+				<p class="lede">PluginDaddy turns a sentence into a working WordPress plugin. Install the companion plugin, paste your idea, and get production-ready code in seconds — no Composer, no build tools, just clean PHP.</p>
+				<div class="hero-cta">
+					<a class="btn btn-primary btn-lg" href="#get-started">Get your API key</a>
+					<a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
+				</div>
+				<p class="hero-footnote">Works with any WordPress 5.8+ site · PHP 7.4+</p>
+			</div>
+		</section>
+
+		<section id="features" class="section">
+			<div class="container">
+				<h2>Built for people who ship</h2>
+				<div class="feature-grid">
+					<article class="feature">
+						<h3>One-sentence input</h3>
+						<p>Write the plugin you wish existed. PluginDaddy handles the scaffolding, headers, hooks, and activation.</p>
+					</article>
+					<article class="feature">
+						<h3>Multi-file output</h3>
+						<p>Real plugins need more than one file. Get PHP, CSS, and JS organized the way WordPress expects.</p>
+					</article>
+					<article class="feature">
+						<h3>WPCS by default</h3>
+						<p>Every response follows WordPress Coding Standards. No Composer, no external dependencies, no surprises.</p>
+					</article>
+					<article class="feature">
+						<h3>Self-review built in</h3>
+						<p>Generated code is checked for syntax errors, bad hooks, and site-breaking mistakes before you see it.</p>
+					</article>
+					<article class="feature">
+						<h3>Edit before install</h3>
+						<p>Preview the code, tweak it in place, then package it as a zip and install it on your site.</p>
+					</article>
+					<article class="feature">
+						<h3>One API key</h3>
+						<p>No juggling OpenAI, DeepSeek, and Claude keys. PluginDaddy routes to the best provider for you.</p>
+					</article>
+				</div>
+			</div>
+		</section>
+
+		<section id="how" class="section section-alt">
+			<div class="container">
+				<h2>How it works</h2>
+				<ol class="steps">
+					<li>
+						<span class="step-num">1</span>
+						<h3>Install the companion plugin</h3>
+						<p>Drop the AI Plugin Generator plugin into any WordPress site.</p>
+					</li>
+					<li>
+						<span class="step-num">2</span>
+						<h3>Request an API key</h3>
+						<p>Enter your email. We send a key you paste back into the plugin.</p>
+					</li>
+					<li>
+						<span class="step-num">3</span>
+						<h3>Describe the plugin</h3>
+						<p>A sentence is enough. Add details if you want more control.</p>
+					</li>
+					<li>
+						<span class="step-num">4</span>
+						<h3>Install with one click</h3>
+						<p>Preview, edit, package, and install — all from the WordPress admin.</p>
+					</li>
+				</ol>
+			</div>
+		</section>
+
+		<section id="pricing" class="section">
+			<div class="container">
+				<h2>Simple pricing</h2>
+				<div class="pricing-grid">
+					<article class="plan">
+						<h3>Starter</h3>
+						<p class="price">Free</p>
+						<ul>
+							<li>5 plugins / month</li>
+							<li>Standard AI provider</li>
+							<li>Community support</li>
+						</ul>
+						<a class="btn btn-ghost" href="#get-started">Get started</a>
+					</article>
+					<article class="plan plan-featured">
+						<h3>Pro</h3>
+						<p class="price">$19<span>/mo</span></p>
+						<ul>
+							<li>100 plugins / month</li>
+							<li>Priority AI providers</li>
+							<li>Email support</li>
+						</ul>
+						<a class="btn btn-primary" href="#get-started">Start Pro</a>
+					</article>
+					<article class="plan">
+						<h3>Studio</h3>
+						<p class="price">$49<span>/mo</span></p>
+						<ul>
+							<li>Unlimited plugins</li>
+							<li>All providers, highest tier</li>
+							<li>Priority support</li>
+						</ul>
+						<a class="btn btn-ghost" href="#get-started">Start Studio</a>
+					</article>
+				</div>
+			</div>
+		</section>
+
+		<section id="get-started" class="section cta">
+			<div class="container cta-inner">
+				<h2>Get your API key</h2>
+				<p>Enter your email. We'll send a key you can paste into the WordPress plugin.</p>
+				<form class="signup-form" id="signup-form" novalidate>
+					<input type="email" name="email" placeholder="you@example.com" required>
+					<button class="btn btn-primary btn-lg" type="submit">Send me a key</button>
+				</form>
+				<p class="cta-note" id="signup-note"></p>
+			</div>
+		</section>
+	</main>
+
+	<footer class="site-footer">
+		<div class="container footer-inner">
+			<p>&copy; <span id="year"></span> PluginDaddy. All rights reserved.</p>
+			<nav>
+				<a href="#">Terms</a>
+				<a href="#">Privacy</a>
+				<a href="#">Contact</a>
+			</nav>
+		</div>
+	</footer>
+
+	<script src="assets/script.js"></script>
+</body>
+</html>

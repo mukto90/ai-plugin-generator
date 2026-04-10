@@ -2,7 +2,11 @@
 
 ## Overview
 
-A WordPress plugin that lets admins generate other WordPress plugins using AI. Users describe what they want, an AI provider generates the PHP code, and the plugin packages it as a downloadable/installable zip.
+A WordPress plugin that lets admins generate other WordPress plugins using AI. Users describe what they want, the plugin forwards the request to the **PluginDaddy** service (hosted at `plugindaddy.com`), which talks to the real AI providers and returns generated PHP code. The plugin then packages the result as a downloadable/installable zip.
+
+This repo also contains two sibling deliverables that are **not shipped** with the main plugin and are deployed separately:
+- `website/` — the marketing landing page for plugindaddy.com
+- `service/` — the WordPress plugin that runs on plugindaddy.com, built on WordPress + Easy Digital Downloads + EDD Recurring Payments. Receives generate requests, authenticates via API key, forwards to real AI providers (OpenAI, DeepSeek, Claude), and returns the response.
 
 ## Requirements Summary
 
@@ -31,9 +35,9 @@ A WordPress plugin that lets admins generate other WordPress plugins using AI. U
 - Menu position: **3** (right after Dashboard)
 
 ### Settings
-- AI provider selection dropdown (OpenAI, DeepSeek, Gemini)
-- API key field (plain password input, no show/hide toggle icon)
-- Model override field (optional, uses provider default if empty)
+- **No BYOK** — users do not bring their own OpenAI/DeepSeek/etc. keys. The plugin only stores a PluginDaddy service API key.
+- **Request key form**: a single email field. Submitting it asks PluginDaddy to email an API key to that address.
+- **Verify form**: shown after the request is sent. Two fields — email + API key — used to save and verify the credentials against PluginDaddy. On success, the saved key is the credential used for all generation requests.
 - Settings saved via REST API
 
 ### UI Style
@@ -72,40 +76,32 @@ A WordPress plugin that lets admins generate other WordPress plugins using AI. U
 - `POST /plugins/{id}/replace` — replace installed plugin with updated zip (deactivate → uninstall → reinstall → reactivate if was active)
 - `GET /plugins/{id}/download` — get download URL for zip file
 - `GET /check-slug?slug=xxx` — check slug against local DB, installed plugins, and wordpress.org API
-- `GET /settings` — get current settings (API key masked)
-- `PUT /settings` — update settings (provider, API key, model)
-- `GET /providers` — list available AI providers
+- `GET /settings` — get current settings (API key masked, email visible)
+- `PUT /settings` — update settings (email + API key); verifies against PluginDaddy before saving
+- `POST /settings/request-key` — ask PluginDaddy to email a new API key to the supplied address
 
 ### Storage
 - **Database**: Custom table (`{prefix}aipg_plugins`) for metadata — name, slug, version, author, description, requirements, file path, status, timestamps. No generated code stored in DB — zip on filesystem is the source of truth.
 - **Filesystem**: Zips stored in `wp-content/uploads/ai-plugin-generator/`
 
-### AI Integration
-- Single-shot generation: AI receives the requirements and generates the complete plugin code
-- Providers share common logic via abstract base class `AI_Provider`
-- Providers: OpenAI (default model: gpt-4o, max_tokens: 16000), DeepSeek (default: deepseek-chat, max_tokens: 8192), Gemini (default: gemini-2.0-flash, maxOutputTokens: 16000)
-- **Timeouts**: 300s for generation, 30s for key validation
-- Multi-file output format: `=== filename.php ===` headings followed by ``` code blocks
-- Raw AI response returned to frontend — JS parses multi-file format
-- System prompt instructs AI to:
-  - Follow WPCS strictly for PHP, CSS, and JS
-  - NOT use Composer or external dependencies — generated plugins must be fully self-contained
-  - Use clean, modern UI/UX for frontend output
-  - Use `=== filename ===` headings for multi-file responses
-  - **Self-review code** before responding: check for syntax errors, undefined functions, missing brackets, incorrect hook usage, and anything that could cause a fatal error or site crash
+### AI Integration (via PluginDaddy service)
+- The main plugin does **not** talk to OpenAI/DeepSeek/Claude directly. All AI calls go to the PluginDaddy service.
+- Service base URL is stored in a constant: `AIPG_SERVICE_URL` (default `https://plugindaddy.com`) so it can be changed for staging/testing.
+- Generate endpoint on the service: `{AIPG_SERVICE_URL}/wp-json/plugindaddy/v1/plugin/generate`
+- The main plugin sends **only the requirements** (plus plugin name/slug/metadata) along with the stored API key. All system prompts, provider selection, model choice, max_tokens, and WPCS guidance live on the **service side**, not here.
+- **Timeouts**: 300s for generation, 30s for key verification.
+- Multi-file output format (produced by the service, parsed by this plugin's JS): `=== filename.php ===` headings followed by ``` code blocks.
+- Raw response from the service is returned to the frontend — JS parses the multi-file format.
 
-### Provider Architecture
-- `AI_Provider` (abstract class) contains all shared logic:
-  - Constructor loads `api_key` and `model` from `aipg_settings` option
-  - `get_system_prompt()`, `build_prompt()`, `extract_code()` — shared prompt/response handling
-  - `check_api_key()` — shared validation with provider name in error message
-  - `parse_response()` — shared HTTP response parsing + error handling
-  - Timeout properties: `$generate_timeout = 300`, `$validate_timeout = 30`
-- Each provider (`OpenAI`, `DeepSeek`, `Gemini`) only implements:
-  - `get_name()`, `get_slug()`, `get_default_model()` — identity
-  - `generate()` — provider-specific API call format + response extraction
-  - `validate_api_key()` — provider-specific validation call
-- Provider classes are named without `_Provider` suffix since they're already under the `Providers` namespace (e.g., `Providers\DeepSeek`, not `Providers\DeepSeek_Provider`)
+### Service Client
+- A single class `Service_Client` (under `A_Plugin_Generator\`) replaces the old provider architecture.
+- Responsibilities:
+  - Constructor loads `email` and `api_key` from `aipg_settings` option and reads `AIPG_SERVICE_URL`.
+  - `generate( $requirements, $meta )` — POSTs to `/wp-json/plugindaddy/v1/plugin/generate`, returns raw response body or `WP_Error`.
+  - `request_key( $email )` — POSTs to `/wp-json/plugindaddy/v1/keys/request` to trigger the "email me a key" flow.
+  - `verify_key( $email, $api_key )` — POSTs to `/wp-json/plugindaddy/v1/keys/verify` used by the Settings save flow.
+  - `parse_response()` — shared HTTP response parsing + error surfacing.
+- Timeout properties: `$generate_timeout = 300`, `$verify_timeout = 30`.
 
 ### Zip Building
 - `Zip_Builder` accepts an array of `{filename, code}` objects (multi-file) or a raw string (single file fallback)
@@ -134,26 +130,41 @@ ai-plugin-generator/
     Rest_Controller.php            # REST API registration and all endpoints
     Plugin_Manager.php             # CRUD for generated plugins (DB + filesystem)
     Plugin_Installer.php           # Install/activate/deactivate/replace/uninstall
-    Code_Generator.php             # Orchestrates AI code generation, provider factory
+    Code_Generator.php             # Orchestrates generation via Service_Client
+    Service_Client.php             # HTTP client to plugindaddy.com (generate/request_key/verify_key)
     Zip_Builder.php                # Packages generated code into zip (multi-file aware)
     Admin/                         # A_Plugin_Generator\Admin\
       Admin.php                    # Admin pages, menus (position 3), enqueues
-    Providers/                     # A_Plugin_Generator\Providers\
-      AI_Provider.php              # Abstract base class with shared logic
-      OpenAI.php                   # OpenAI implementation
-      DeepSeek.php                 # DeepSeek implementation
-      Gemini.php                   # Gemini implementation
   admin/                           # Non-class assets (views, CSS, JS)
     views/
       create-plugin.php            # Create/Edit plugin page template (shared, with samples dropdown)
       list-plugins.php             # List plugins page template (card UI, no search)
-      settings.php                 # Settings page template (no API key toggle)
+      settings.php                 # Settings page template (request-key + verify forms)
     css/
       admin-style.css              # Admin styles (unified buttons, cards, tabs, slug status, etc.)
     js/
       create-plugin.js             # jQuery: samples, slug check, generate, multi-file preview, code editing
       list-plugins.js              # jQuery: list, pagination, install/activate/deactivate/replace/delete
-      settings.js                  # jQuery: load/save provider settings
+      settings.js                  # jQuery: request-key + verify flow
+  website/                         # NOT shipped — landing page for plugindaddy.com (deployed separately)
+    index.html
+    assets/
+      style.css
+      script.js
+  service/                         # NOT shipped — separate WP plugin hosted on plugindaddy.com
+    plugindaddy-service.php        # Main plugin file
+    includes/
+      Plugin.php                   # Bootstrap
+      Rest_Controller.php          # /plugindaddy/v1/plugin/generate, /keys/request, /keys/verify
+      Key_Manager.php              # Issues, emails, verifies API keys; ties keys to EDD customers
+      AI_Router.php                # Chooses provider (OpenAI/DeepSeek/Claude) and forwards the request
+      Prompt_Builder.php           # System + user prompts (WPCS rules, multi-file format, self-review)
+      EDD_Integration.php          # EDD + EDD Recurring hooks: issue key on purchase, revoke on cancel
+      Providers/
+        AI_Provider.php            # Abstract base
+        OpenAI.php
+        DeepSeek.php
+        Claude.php
 ```
 
 ## Key Conventions
@@ -168,5 +179,25 @@ ai-plugin-generator/
 - Buttons: always use `.aipg-btn` class; `.aipg-btn-sm` for row actions; `.aipg-btn-danger` for destructive; `.aipg-btn-replace` (yellow) for replace
 - Edit mode: create page with `?edit_id=X` loads existing plugin data, slug becomes readonly
 - AI-generated plugins must NOT use Composer — they are self-contained
-- Provider classes use short names under the `Providers` namespace (e.g., `DeepSeek`, not `DeepSeek_Provider`)
 - Deleting a plugin cleans up everything: WP plugin files, DB record, and zip
+- The main plugin never calls OpenAI/DeepSeek/Claude directly — all AI calls go through `Service_Client` → PluginDaddy
+- `AIPG_SERVICE_URL` is the single source of truth for the service base URL (define it in `ai-plugin-generator.php`)
+- `aipg_settings` option shape: `{ email: string, api_key: string }` — no provider/model fields
+
+## Service (plugindaddy.com) — separate plugin under `service/`
+
+This is a standalone WordPress plugin deployed to plugindaddy.com. Not shipped with the main plugin.
+
+- **Stack**: WordPress + Easy Digital Downloads + EDD Recurring Payments
+- **Purpose**: authenticate incoming requests by API key, build the full prompt, forward to a real AI provider (OpenAI/DeepSeek/Claude), return the response
+- **REST namespace**: `plugindaddy/v1`
+  - `POST /plugin/generate` — body: `{ api_key, email, requirements, meta }`. Verifies key, builds prompt, calls AI, returns raw AI text.
+  - `POST /keys/request` — body: `{ email }`. Generates a key, stores it, emails it to the address. Returns success regardless of whether email exists (to avoid enumeration).
+  - `POST /keys/verify` — body: `{ email, api_key }`. Returns `{ valid: bool, plan: string, expires_at }`.
+- **Key lifecycle**: keys are issued on EDD purchase (one-off or subscription), stored against the customer, revoked on subscription cancel/expiry via EDD Recurring hooks. Anonymous `/keys/request` may issue a trial-tier key.
+- **Prompts live here**: all system prompts (WPCS rules, no-Composer constraint, multi-file `=== filename ===` format, self-review instructions, clean-UI guidance) belong to `Prompt_Builder` in the service, not the main plugin
+- **Provider selection**: `AI_Router` picks the provider based on the key's plan/config; the main plugin has no say
+
+## Website (`website/`)
+
+Static one-page marketing site for plugindaddy.com. Plain HTML/CSS/JS, no build step. Deployed separately from the WordPress plugins.
